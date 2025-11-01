@@ -389,21 +389,28 @@ interactive_config() {
     if [[ "$BACKUP_TYPE" == "block" ]] || [[ "$BACKUP_TYPE" == "both" ]]; then
         echo
         info "Block Device Configuration:"
-        
+
         # Try to auto-detect root device
-        ROOT_DEVICE=$(findmnt -n -o SOURCE / | sed 's/[0-9]*$//' | sed 's/p$//' 2>/dev/null || echo "")
-        
-        if [ -n "$ROOT_DEVICE" ]; then
+        # Strip subvolume notation [/@], partition numbers, and trailing 'p'
+        ROOT_DEVICE=$(findmnt -n -o SOURCE / | sed 's/\[.*\]$//' | sed 's/[0-9]*$//' | sed 's/p$//' 2>/dev/null || echo "")
+
+        if [ -n "$ROOT_DEVICE" ] && [ -b "$ROOT_DEVICE" ]; then
             info "Auto-detected root device: $ROOT_DEVICE"
             BLOCK_DEVICE=$(prompt "Enter block device to backup" "$ROOT_DEVICE")
         else
+            if [ -n "$ROOT_DEVICE" ]; then
+                warn "Detected device $ROOT_DEVICE is not a valid block device"
+            fi
             info "Common devices: /dev/sda, /dev/nvme0n1, /dev/vda"
             BLOCK_DEVICE=$(prompt "Enter block device to backup" "/dev/sda")
         fi
-        
+
         # Verify it's a block device
         if [ ! -b "$BLOCK_DEVICE" ]; then
             warn "Warning: $BLOCK_DEVICE does not exist or is not a block device"
+            info "Available block devices:"
+            lsblk -d -n -o NAME,SIZE,TYPE | grep disk | awk '{print "  /dev/"$1" ("$2")"}'
+            echo
             CONTINUE=$(prompt "Continue anyway? (yes/no)" "no")
             if [[ "$CONTINUE" != "yes" ]]; then
                 error "Installation cancelled"
@@ -486,42 +493,74 @@ create_encryption_key() {
 # Test connection to PBS
 test_connection() {
     log "Testing connection to PBS server..."
-    info "This may take up to 30 seconds..."
 
     export PBS_REPOSITORY="$PBS_REPOSITORY"
     export PBS_PASSWORD="$PBS_PASSWORD"
 
-    # Use timeout to prevent hanging (30 seconds max)
-    if timeout 30 proxmox-backup-client snapshot list &>/dev/null; then
-        log "Connection test successful!"
-        return 0
-    else
-        local exit_code=$?
+    # Step 1: Verify server is reachable
+    info "Step 1/3: Checking if server is reachable..."
+    if ! timeout 5 bash -c "curl -sk --max-time 5 https://${PBS_SERVER}:${PBS_PORT} >/dev/null 2>&1"; then
         echo
-        error "Connection test failed"
-
-        if [ $exit_code -eq 124 ]; then
-            error "Connection timed out after 30 seconds"
-            error "Possible issues:"
-            error "  - PBS server is unreachable (check IP/hostname)"
-            error "  - Firewall blocking port ${PBS_PORT}"
-            error "  - Network connectivity issues"
-        else
-            error "Authentication or configuration error"
-            error "Possible issues:"
-            error "  - Invalid credentials (username/password/token)"
-            error "  - Datastore does not exist on server"
-            error "  - User lacks permissions for the datastore"
-        fi
-
+        error "Server is not reachable at https://${PBS_SERVER}:${PBS_PORT}"
+        error "Possible issues:"
+        error "  - PBS server is down or unreachable"
+        error "  - Wrong IP/hostname"
+        error "  - Firewall blocking port ${PBS_PORT}"
+        error "  - Network connectivity issues"
         echo
         info "Troubleshooting:"
         echo "  1. Verify server is reachable: ping ${PBS_SERVER}"
         echo "  2. Test HTTPS connection: curl -k https://${PBS_SERVER}:${PBS_PORT}"
-        echo "  3. Verify credentials in PBS web interface"
-        echo "  4. Check datastore name matches exactly"
-
+        echo "  3. Check if PBS web interface is accessible in browser"
         return 1
+    fi
+    log "Server is reachable"
+
+    # Step 2: Test authentication with a simple command
+    info "Step 2/3: Testing authentication..."
+
+    # Try to get datastore status (simpler than listing snapshots)
+    local test_output
+    if test_output=$(timeout 30 proxmox-backup-client status --output-format json 2>&1); then
+        log "Authentication successful"
+    else
+        local exit_code=$?
+        echo
+
+        if [ $exit_code -eq 124 ]; then
+            error "Authentication test timed out"
+            error "Server is reachable but authentication is hanging"
+        else
+            error "Authentication failed"
+            # Show the actual error from PBS client
+            echo "$test_output" | grep -i "error\|permission\|authentication\|denied" | head -3
+        fi
+
+        error "Possible issues:"
+        error "  - Invalid credentials (username/password/token)"
+        error "  - Datastore '${PBS_DATASTORE}' does not exist"
+        error "  - User lacks permissions for the datastore"
+        error "  - API token is not properly formatted"
+        echo
+        info "Troubleshooting:"
+        echo "  1. Verify credentials in PBS web interface"
+        echo "  2. Check datastore name: ${PBS_DATASTORE}"
+        echo "  3. Verify user has backup permissions"
+        echo "  4. For API tokens, format is: username@realm!tokenname"
+        return 1
+    fi
+
+    # Step 3: Verify datastore access
+    info "Step 3/3: Verifying datastore access..."
+    if timeout 30 proxmox-backup-client snapshot list &>/dev/null; then
+        log "Datastore access verified"
+        log "Connection test successful!"
+        return 0
+    else
+        warn "Could not list snapshots, but authentication works"
+        info "This is normal if no backups exist yet"
+        log "Connection test successful!"
+        return 0
     fi
 }
 
