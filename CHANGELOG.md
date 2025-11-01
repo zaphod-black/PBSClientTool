@@ -46,6 +46,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Reduced authentication timeout from 30s to 15s
 - README now includes comprehensive step-by-step walkthrough
 - Prerequisites section expanded with detailed PBS server setup instructions
+- README updated with live backup progress examples in Step 13
+- Reconfiguration section now documents "Run backup now" option (option 4)
+- Manual Backup section updated to recommend easy method via installer
 - **Default realm changed from "pbs" to "pam"** (more common for root authentication)
 - **Default encryption setting changed from "yes" to "no"** (user can opt-in if needed)
 - Main menu now includes "Run backup now" option for immediate backup testing

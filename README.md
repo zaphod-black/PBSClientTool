@@ -255,9 +255,35 @@ The installer creates systemd service and timer:
 ```
 Do you want to run a backup now? (yes/no) [no]: yes
 [INFO] Starting immediate backup...
+
+╔════════════════════════════════════════════════════════════╗
+║  Backup Progress (Live)                                    ║
+║  Press Ctrl+C to exit (backup continues in background)    ║
+╚════════════════════════════════════════════════════════════╝
+
+[2025-11-01 18:30:00] Starting backup for mcware-01
+[2025-11-01 18:30:00] Backup type: both
+[2025-11-01 18:30:00] Starting file-level backup (.pxar)...
+Starting backup: host/mcware-01/2025-11-01T23:30:00Z
+Client name: mcware-01
+Starting backup protocol: Sat Nov  1 18:30:00 2025
+
+Uploaded 123.4 MiB in 5s (24.7 MiB/s)
+Files: 12,345 | Dirs: 1,234 | Size: 4.5 GiB
+
+[2025-11-01 18:30:05] File-level backup completed successfully
+════════════════════════════════════════════════════════════
+
+[INFO] Backup completed successfully!
 ```
 
-Choose `yes` to test your backup immediately, or `no` to wait for the scheduled time.
+Choose `yes` to test your backup immediately with **live progress monitoring**, or `no` to wait for the scheduled time.
+
+**What you'll see:**
+- Real-time backup progress with file counts and transfer speeds
+- PBS client's built-in progress indicators
+- Automatic completion detection
+- You can press Ctrl+C to exit (backup continues in background)
 
 ### Step 14: Completion
 
@@ -283,23 +309,30 @@ Configuration Summary:
 If PBS client is already installed, the script will detect this and offer you options:
 
 **With existing configuration:**
-- **Reconfigure connection only** - Quick update of PBS server IP/credentials only
-- **Full reconfiguration** - Redo all settings (paths, schedules, retention, etc.)
-- **Reinstall PBS client and reconfigure** - Complete reinstall
-- **Exit without changes**
+1. **Reconfigure connection only** - Quick update of PBS server IP/credentials only
+2. **Full reconfiguration** - Redo all settings (paths, schedules, retention, etc.)
+3. **Reinstall PBS client and reconfigure** - Complete reinstall
+4. **Run backup now** - Test your backups with live progress monitoring
+5. **Exit without changes**
 
 **Without existing configuration:**
-- **Configure PBS client** - Set up for the first time
-- **Reinstall and configure** - Fresh installation
-- **Exit without changes**
+1. **Configure PBS client** - Set up for the first time
+2. **Reinstall and configure** - Fresh installation
+3. **Exit without changes**
 
-The connection-only reconfiguration is perfect for:
+**Connection-only reconfiguration is perfect for:**
 - Switching to a different backup server
 - Updating expired API tokens
 - Changing authentication methods
 - Updating datastore names
+- All backup settings (paths, schedules, retention policies) are preserved
 
-All backup settings (paths, schedules, retention policies) are preserved.
+**Run backup now provides:**
+- Immediate backup testing without waiting for schedule
+- Live progress monitoring with real-time statistics
+- File counts, transfer speeds, and compression ratios
+- Automatic completion detection
+- Option to exit early (backup continues in background)
 
 ## Usage Example
 
@@ -413,9 +446,25 @@ sudo journalctl -fu pbs-backup.service
 
 ### Manual Backup
 
+**Easy way (with live progress):**
+```bash
+# Run the installer and choose option 4
+sudo ./pbs-client-installer.sh
+# Select: 4) Run backup now
+```
+
+This provides:
+- Live progress monitoring with file counts and transfer speeds
+- Automatic completion detection
+- Clear success/failure status
+
+**Direct command (no progress display):**
 ```bash
 # Run backup immediately
 sudo systemctl start pbs-backup.service
+
+# Follow logs manually
+sudo journalctl -fu pbs-backup.service
 
 # List all backups
 sudo -E proxmox-backup-client snapshot list
