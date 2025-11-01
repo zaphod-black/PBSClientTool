@@ -516,12 +516,12 @@ test_connection() {
     fi
     log "Server is reachable"
 
-    # Step 2: Test authentication with a simple command
+    # Step 2: Test authentication
     info "Step 2/3: Testing authentication..."
 
-    # Try to get datastore status (simpler than listing snapshots)
+    # Use the 'login' command which tests authentication and stores a ticket
     local test_output
-    if test_output=$(timeout 30 proxmox-backup-client status --output-format json 2>&1); then
+    if test_output=$(timeout 15 proxmox-backup-client login 2>&1); then
         log "Authentication successful"
     else
         local exit_code=$?
@@ -533,7 +533,11 @@ test_connection() {
         else
             error "Authentication failed"
             # Show the actual error from PBS client
-            echo "$test_output" | grep -i "error\|permission\|authentication\|denied" | head -3
+            if echo "$test_output" | grep -q "error\|Error"; then
+                echo
+                echo "$test_output" | grep -i "error" | head -5
+                echo
+            fi
         fi
 
         error "Possible issues:"
@@ -547,18 +551,20 @@ test_connection() {
         echo "  2. Check datastore name: ${PBS_DATASTORE}"
         echo "  3. Verify user has backup permissions"
         echo "  4. For API tokens, format is: username@realm!tokenname"
+        echo
+        info "Debug info:"
+        echo "  Repository: ${PBS_REPOSITORY}"
         return 1
     fi
 
-    # Step 3: Verify datastore access
+    # Step 3: Verify datastore access by listing backup groups
     info "Step 3/3: Verifying datastore access..."
-    if timeout 30 proxmox-backup-client snapshot list &>/dev/null; then
+    if timeout 15 proxmox-backup-client list 2>/dev/null; then
         log "Datastore access verified"
         log "Connection test successful!"
         return 0
     else
-        warn "Could not list snapshots, but authentication works"
-        info "This is normal if no backups exist yet"
+        warn "Could not list backup groups (this is normal if no backups exist yet)"
         log "Connection test successful!"
         return 0
     fi
