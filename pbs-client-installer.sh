@@ -486,16 +486,41 @@ create_encryption_key() {
 # Test connection to PBS
 test_connection() {
     log "Testing connection to PBS server..."
-    
+    info "This may take up to 30 seconds..."
+
     export PBS_REPOSITORY="$PBS_REPOSITORY"
     export PBS_PASSWORD="$PBS_PASSWORD"
-    
-    if proxmox-backup-client snapshot list &>/dev/null; then
+
+    # Use timeout to prevent hanging (30 seconds max)
+    if timeout 30 proxmox-backup-client snapshot list &>/dev/null; then
         log "Connection test successful!"
         return 0
     else
+        local exit_code=$?
+        echo
         error "Connection test failed"
-        error "Please verify your server details and credentials"
+
+        if [ $exit_code -eq 124 ]; then
+            error "Connection timed out after 30 seconds"
+            error "Possible issues:"
+            error "  - PBS server is unreachable (check IP/hostname)"
+            error "  - Firewall blocking port ${PBS_PORT}"
+            error "  - Network connectivity issues"
+        else
+            error "Authentication or configuration error"
+            error "Possible issues:"
+            error "  - Invalid credentials (username/password/token)"
+            error "  - Datastore does not exist on server"
+            error "  - User lacks permissions for the datastore"
+        fi
+
+        echo
+        info "Troubleshooting:"
+        echo "  1. Verify server is reachable: ping ${PBS_SERVER}"
+        echo "  2. Test HTTPS connection: curl -k https://${PBS_SERVER}:${PBS_PORT}"
+        echo "  3. Verify credentials in PBS web interface"
+        echo "  4. Check datastore name matches exactly"
+
         return 1
     fi
 }
