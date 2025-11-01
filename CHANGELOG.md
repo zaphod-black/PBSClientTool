@@ -13,20 +13,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Full reconfiguration of all settings
   - Reinstall option with reconfiguration
   - Exit without changes option
-- Connection test timeout (30 seconds) to prevent indefinite hanging
-- Detailed error messages for connection failures
-  - Differentiates between timeout and authentication errors
-  - Provides specific troubleshooting steps based on error type
-  - Displays helpful diagnostic commands
+- 3-step connection verification process:
+  - Step 1: Server reachability test (5s timeout)
+  - Step 2: Authentication test (30s timeout)
+  - Step 3: Datastore access verification
+- Display available block devices when invalid device is entered
+- Step-by-step progress indicators during connection testing
 
 ### Changed
 - Installation instructions now use `git clone` instead of `wget`
 - Connection test provides better user feedback during testing
 - Script now detects existing configurations and offers appropriate options
+- Block device detection now strips btrfs subvolume notation (e.g., `[/@]`)
+- Connection test succeeds if authentication works, even if no backups exist yet
+- More specific error messages based on which step of connection test fails
 
 ### Fixed
 - Script no longer hangs indefinitely when PBS server is unreachable
-- Connection test now properly handles timeout scenarios
+- Block device auto-detection now correctly handles btrfs subvolumes
+- Invalid device paths like `/dev/mapper/root[/@]` are now properly cleaned
+- Connection test now differentiates between network issues and authentication failures
+- Shows actual PBS client error messages when authentication fails
 
 ## [1.0.0] - 2025-11-01
 
