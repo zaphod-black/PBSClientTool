@@ -813,19 +813,23 @@ run_backup_now() {
         echo "╚════════════════════════════════════════════════════════════╝"
         echo
 
-        # Follow logs to show progress
-        timeout 3600 journalctl -fu pbs-backup.service &
-        JOURNAL_PID=$!
+        # Monitor backup in background and kill journalctl when done
+        (
+            while systemctl is-active --quiet pbs-backup.service; do
+                sleep 2
+            done
+            # Service finished, kill the journal follow
+            pkill -P $$ journalctl 2>/dev/null
+        ) &
+        MONITOR_PID=$!
 
-        # Wait for the service to complete or fail
-        while systemctl is-active --quiet pbs-backup.service; do
-            sleep 2
-        done
+        # Follow logs in foreground (will be killed by monitor when backup completes)
+        journalctl -fu pbs-backup.service 2>/dev/null || true
 
-        # Kill the journal follow
-        kill $JOURNAL_PID 2>/dev/null || true
-        wait $JOURNAL_PID 2>/dev/null || true
+        # Wait for monitor to finish
+        wait $MONITOR_PID 2>/dev/null
 
+        # Clear any leftover output
         echo
         echo "════════════════════════════════════════════════════════════"
 
@@ -963,20 +967,23 @@ main() {
                     echo "╚════════════════════════════════════════════════════════════╝"
                     echo
 
-                    # Follow logs to show progress
-                    # Using timeout to automatically stop after backup completes
-                    timeout 3600 journalctl -fu pbs-backup.service &
-                    JOURNAL_PID=$!
+                    # Monitor backup in background and kill journalctl when done
+                    (
+                        while systemctl is-active --quiet pbs-backup.service; do
+                            sleep 2
+                        done
+                        # Service finished, kill the journal follow
+                        pkill -P $$ journalctl 2>/dev/null
+                    ) &
+                    MONITOR_PID=$!
 
-                    # Wait for the service to complete or fail
-                    while systemctl is-active --quiet pbs-backup.service; do
-                        sleep 2
-                    done
+                    # Follow logs in foreground (will be killed by monitor when backup completes)
+                    journalctl -fu pbs-backup.service 2>/dev/null || true
 
-                    # Kill the journal follow
-                    kill $JOURNAL_PID 2>/dev/null || true
-                    wait $JOURNAL_PID 2>/dev/null || true
+                    # Wait for monitor to finish
+                    wait $MONITOR_PID 2>/dev/null
 
+                    # Clear any leftover output
                     echo
                     echo "════════════════════════════════════════════════════════════"
 
