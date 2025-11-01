@@ -270,10 +270,63 @@ interactive_config() {
     fi
     
     echo
+    # Backup type selection
+    info "Backup Type:"
+    echo "  1) File-level only (.pxar) - Fast, efficient, selective restore"
+    echo "  2) Block device only (.img) - Full disk image, bootable as VM"
+    echo "  3) Both (Hybrid) - Daily files + Weekly block device (recommended)"
+    BACKUP_TYPE_CHOICE=$(prompt "Select backup type [1/2/3]" "3")
+    
+    case "$BACKUP_TYPE_CHOICE" in
+        1)
+            BACKUP_TYPE="files"
+            ;;
+        2)
+            BACKUP_TYPE="block"
+            ;;
+        3)
+            BACKUP_TYPE="both"
+            ;;
+        *)
+            warn "Invalid choice, defaulting to hybrid (both)"
+            BACKUP_TYPE="both"
+            ;;
+    esac
+    
+    echo
     # Backup configuration
     info "Backup Configuration:"
-    BACKUP_PATHS=$(prompt "Enter paths to backup (space-separated)" "/")
-    EXCLUDE_PATTERNS=$(prompt "Enter exclusion patterns (space-separated)" "/tmp /var/tmp /var/cache /proc /sys /dev /run")
+    
+    if [[ "$BACKUP_TYPE" == "files" ]] || [[ "$BACKUP_TYPE" == "both" ]]; then
+        BACKUP_PATHS=$(prompt "Enter paths to backup (space-separated)" "/")
+        EXCLUDE_PATTERNS=$(prompt "Enter exclusion patterns (space-separated)" "/tmp /var/tmp /var/cache /proc /sys /dev /run")
+    fi
+    
+    if [[ "$BACKUP_TYPE" == "block" ]] || [[ "$BACKUP_TYPE" == "both" ]]; then
+        echo
+        info "Block Device Configuration:"
+        
+        # Try to auto-detect root device
+        ROOT_DEVICE=$(findmnt -n -o SOURCE / | sed 's/[0-9]*$//' | sed 's/p$//' 2>/dev/null || echo "")
+        
+        if [ -n "$ROOT_DEVICE" ]; then
+            info "Auto-detected root device: $ROOT_DEVICE"
+            BLOCK_DEVICE=$(prompt "Enter block device to backup" "$ROOT_DEVICE")
+        else
+            info "Common devices: /dev/sda, /dev/nvme0n1, /dev/vda"
+            BLOCK_DEVICE=$(prompt "Enter block device to backup" "/dev/sda")
+        fi
+        
+        # Verify it's a block device
+        if [ ! -b "$BLOCK_DEVICE" ]; then
+            warn "Warning: $BLOCK_DEVICE does not exist or is not a block device"
+            CONTINUE=$(prompt "Continue anyway? (yes/no)" "no")
+            if [[ "$CONTINUE" != "yes" ]]; then
+                error "Installation cancelled"
+                exit 1
+            fi
+        fi
+    fi
     
     echo
     info "Backup Schedule:"
@@ -375,8 +428,10 @@ create_systemd_service() {
 # PBS Client Configuration
 PBS_REPOSITORY="${PBS_REPOSITORY}"
 PBS_PASSWORD="${PBS_PASSWORD}"
+BACKUP_TYPE="${BACKUP_TYPE}"
 BACKUP_PATHS="${BACKUP_PATHS}"
 EXCLUDE_PATTERNS="${EXCLUDE_PATTERNS}"
+BLOCK_DEVICE="${BLOCK_DEVICE}"
 KEEP_LAST=${KEEP_LAST}
 KEEP_DAILY=${KEEP_DAILY}
 KEEP_WEEKLY=${KEEP_WEEKLY}
@@ -397,48 +452,126 @@ source /etc/proxmox-backup-client/config
 export PBS_REPOSITORY
 export PBS_PASSWORD
 
-# Build backup command
-BACKUP_CMD="proxmox-backup-client backup"
 HOSTNAME=$(hostname)
+BACKUP_SUCCESS=true
 
-# Add each path as separate archive
-for path in $BACKUP_PATHS; do
-    # Sanitize path for archive name
-    archive_name=$(echo "$path" | sed 's/^\///' | sed 's/\//-/g')
-    [ -z "$archive_name" ] && archive_name="root"
+log() {
+    echo "[$(date +'%Y-%m-%d %H:%M:%S')] $1"
+}
+
+# Function to create file-level backup
+backup_files() {
+    log "Starting file-level backup (.pxar)..."
     
-    BACKUP_CMD="$BACKUP_CMD ${archive_name}.pxar:${path}"
+    BACKUP_CMD="proxmox-backup-client backup"
     
-    # Add --include-dev for mount points
-    if mountpoint -q "$path" 2>/dev/null; then
-        BACKUP_CMD="$BACKUP_CMD --include-dev ${path}"
+    # Add each path as separate archive
+    for path in $BACKUP_PATHS; do
+        # Sanitize path for archive name
+        archive_name=$(echo "$path" | sed 's/^\///' | sed 's/\//-/g')
+        [ -z "$archive_name" ] && archive_name="root"
+        
+        BACKUP_CMD="$BACKUP_CMD ${archive_name}.pxar:${path}"
+        
+        # Add --include-dev for mount points
+        if mountpoint -q "$path" 2>/dev/null; then
+            BACKUP_CMD="$BACKUP_CMD --include-dev ${path}"
+        fi
+    done
+    
+    # Add exclusions
+    for pattern in $EXCLUDE_PATTERNS; do
+        BACKUP_CMD="$BACKUP_CMD --exclude=${pattern}"
+    done
+    
+    # Add other options
+    BACKUP_CMD="$BACKUP_CMD --skip-lost-and-found --change-detection-mode=metadata"
+    
+    # Execute backup
+    if eval $BACKUP_CMD; then
+        log "File-level backup completed successfully"
+        return 0
+    else
+        log "File-level backup FAILED" >&2
+        return 1
     fi
-done
+}
 
-# Add exclusions
-for pattern in $EXCLUDE_PATTERNS; do
-    BACKUP_CMD="$BACKUP_CMD --exclude=${pattern}"
-done
-
-# Add other options
-BACKUP_CMD="$BACKUP_CMD --skip-lost-and-found --change-detection-mode=metadata"
-
-# Execute backup
-echo "[$(date)] Starting backup..."
-if eval $BACKUP_CMD; then
-    echo "[$(date)] Backup completed successfully"
+# Function to create block device backup
+backup_block_device() {
+    log "Starting block device backup (.img)..."
     
-    # Prune old backups
-    echo "[$(date)] Pruning old backups..."
+    if [ -z "$BLOCK_DEVICE" ]; then
+        log "ERROR: BLOCK_DEVICE not configured" >&2
+        return 1
+    fi
+    
+    if [ ! -b "$BLOCK_DEVICE" ]; then
+        log "ERROR: $BLOCK_DEVICE is not a block device" >&2
+        return 1
+    fi
+    
+    # Get device size
+    DEVICE_SIZE=$(blockdev --getsize64 "$BLOCK_DEVICE" 2>/dev/null || echo "0")
+    DEVICE_SIZE_GB=$((DEVICE_SIZE / 1024 / 1024 / 1024))
+    
+    log "Backing up device: $BLOCK_DEVICE (${DEVICE_SIZE_GB}GB)"
+    log "This may take a while..."
+    
+    # Sanitize device name for archive
+    DEVICE_NAME=$(basename "$BLOCK_DEVICE")
+    
+    # Create block device backup
+    if proxmox-backup-client backup "${DEVICE_NAME}.img:${BLOCK_DEVICE}"; then
+        log "Block device backup completed successfully"
+        return 0
+    else
+        log "Block device backup FAILED" >&2
+        return 1
+    fi
+}
+
+# Main backup execution
+log "Starting backup for ${HOSTNAME}"
+log "Backup type: ${BACKUP_TYPE}"
+
+case "$BACKUP_TYPE" in
+    files)
+        backup_files || BACKUP_SUCCESS=false
+        ;;
+    block)
+        backup_block_device || BACKUP_SUCCESS=false
+        ;;
+    both)
+        # Do file backup first (faster, more frequent)
+        backup_files || BACKUP_SUCCESS=false
+        
+        # Only do block device backup on Sunday (weekly)
+        if [ "$(date +%u)" -eq 7 ]; then
+            log "Weekly block device backup day (Sunday)"
+            backup_block_device || BACKUP_SUCCESS=false
+        else
+            log "Skipping block device backup (runs weekly on Sunday)"
+        fi
+        ;;
+    *)
+        log "ERROR: Invalid BACKUP_TYPE: ${BACKUP_TYPE}" >&2
+        exit 1
+        ;;
+esac
+
+# Prune old backups
+if [ "$BACKUP_SUCCESS" = true ]; then
+    log "Pruning old backups..."
     proxmox-backup-client prune "host/${HOSTNAME}" \
         --keep-last $KEEP_LAST \
         --keep-daily $KEEP_DAILY \
         --keep-weekly $KEEP_WEEKLY \
         --keep-monthly $KEEP_MONTHLY
     
-    echo "[$(date)] Prune completed"
+    log "Backup and prune completed successfully"
 else
-    echo "[$(date)] Backup FAILED" >&2
+    log "Backup FAILED" >&2
     exit 1
 fi
 EOFSCRIPT
@@ -527,8 +660,21 @@ show_summary() {
     echo "  PBS Server: ${PBS_SERVER}:${PBS_PORT}"
     echo "  Datastore: ${PBS_DATASTORE}"
     echo "  Repository: ${PBS_REPOSITORY}"
-    echo "  Backup Paths: ${BACKUP_PATHS}"
-    echo "  Schedule: ${TIMER_SCHEDULE} (${TIMER_ONCALENDAR})"
+    echo "  Backup Type: ${BACKUP_TYPE}"
+    
+    if [[ "$BACKUP_TYPE" == "files" ]] || [[ "$BACKUP_TYPE" == "both" ]]; then
+        echo "  Backup Paths: ${BACKUP_PATHS}"
+    fi
+    
+    if [[ "$BACKUP_TYPE" == "block" ]] || [[ "$BACKUP_TYPE" == "both" ]]; then
+        echo "  Block Device: ${BLOCK_DEVICE}"
+    fi
+    
+    if [[ "$BACKUP_TYPE" == "both" ]]; then
+        echo "  Schedule: Files ${TIMER_SCHEDULE} (${TIMER_ONCALENDAR}), Block device weekly (Sunday)"
+    else
+        echo "  Schedule: ${TIMER_SCHEDULE} (${TIMER_ONCALENDAR})"
+    fi
     echo
     info "Useful Commands:"
     echo "  Check timer status:  sudo systemctl status pbs-backup.timer"
