@@ -50,8 +50,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - This was the root cause of "authentication hanging" issues
 - **CRITICAL**: Password/token capture no longer includes newline character
   - `prompt_password()` function now outputs formatting to stderr
+  - Added defensive newline stripping when writing config file
+  - Filters `\n` and `\r` characters from passwords using `tr -d '\n\r'`
   - Fixes "authentication failed - invalid credentials" in backup service
   - Config file now has properly formatted single-line passwords
+  - Applied to both `reconfigure_connection()` and `create_systemd_service()`
 - Script no longer hangs indefinitely when PBS server is unreachable
 - Block device auto-detection now correctly handles btrfs subvolumes
 - Invalid device paths like `/dev/mapper/root[/@]` are now properly cleaned

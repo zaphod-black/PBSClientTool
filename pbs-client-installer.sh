@@ -293,10 +293,14 @@ reconfigure_connection() {
 
     # Update config file with new connection details
     log "Updating configuration file..."
+
+    # Strip any trailing newlines from password (defensive fix)
+    PBS_PASSWORD_CLEAN=$(echo -n "$PBS_PASSWORD" | tr -d '\n\r')
+
     cat > "$CONFIG_DIR/config" <<EOF
 # PBS Client Configuration
 PBS_REPOSITORY="${PBS_REPOSITORY}"
-PBS_PASSWORD="${PBS_PASSWORD}"
+PBS_PASSWORD="${PBS_PASSWORD_CLEAN}"
 BACKUP_TYPE="${BACKUP_TYPE}"
 BACKUP_PATHS="${BACKUP_PATHS}"
 EXCLUDE_PATTERNS="${EXCLUDE_PATTERNS}"
@@ -584,12 +588,15 @@ create_systemd_service() {
     
     # Create config directory
     mkdir -p "$CONFIG_DIR"
-    
+
+    # Strip any trailing newlines from password (defensive fix)
+    PBS_PASSWORD_CLEAN=$(echo -n "$PBS_PASSWORD" | tr -d '\n\r')
+
     # Save configuration
     cat > "$CONFIG_DIR/config" <<EOF
 # PBS Client Configuration
 PBS_REPOSITORY="${PBS_REPOSITORY}"
-PBS_PASSWORD="${PBS_PASSWORD}"
+PBS_PASSWORD="${PBS_PASSWORD_CLEAN}"
 BACKUP_TYPE="${BACKUP_TYPE}"
 BACKUP_PATHS="${BACKUP_PATHS}"
 EXCLUDE_PATTERNS="${EXCLUDE_PATTERNS}"
