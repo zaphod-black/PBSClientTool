@@ -262,7 +262,7 @@ reconfigure_connection() {
         PBS_REPOSITORY="${PBS_USERNAME}@${PBS_REALM}@${PBS_SERVER}:${PBS_PORT}:${PBS_DATASTORE}"
     else
         PBS_USERNAME=$(prompt "Enter username" "backup")
-        PBS_REALM=$(prompt "Enter realm" "pbs")
+        PBS_REALM=$(prompt "Enter realm" "pam")
         PBS_TOKEN_NAME=$(prompt "Enter token name" "backup-token")
         PBS_TOKEN_SECRET=$(prompt_password "Enter token secret")
         PBS_REPOSITORY="${PBS_USERNAME}@${PBS_REALM}!${PBS_TOKEN_NAME}@${PBS_SERVER}:${PBS_PORT}:${PBS_DATASTORE}"
@@ -346,7 +346,7 @@ interactive_config() {
         PBS_REPOSITORY="${PBS_USERNAME}@${PBS_REALM}@${PBS_SERVER}:${PBS_PORT}:${PBS_DATASTORE}"
     else
         PBS_USERNAME=$(prompt "Enter username" "backup")
-        PBS_REALM=$(prompt "Enter realm" "pbs")
+        PBS_REALM=$(prompt "Enter realm" "pam")
         PBS_TOKEN_NAME=$(prompt "Enter token name" "backup-token")
         PBS_TOKEN_SECRET=$(prompt_password "Enter token secret")
         PBS_REPOSITORY="${PBS_USERNAME}@${PBS_REALM}!${PBS_TOKEN_NAME}@${PBS_SERVER}:${PBS_PORT}:${PBS_DATASTORE}"
@@ -459,7 +459,7 @@ interactive_config() {
     
     # Encryption
     echo
-    ENABLE_ENCRYPTION=$(prompt "Enable encryption? (yes/no)" "yes")
+    ENABLE_ENCRYPTION=$(prompt "Enable encryption? (yes/no)" "no")
 }
 
 # Create encryption key
@@ -892,8 +892,9 @@ main() {
             echo "  1) Reconfigure connection only (server/credentials)"
             echo "  2) Full reconfiguration (all settings)"
             echo "  3) Reinstall PBS client and reconfigure"
-            echo "  4) Exit"
-            ACTION=$(prompt "Select option [1/2/3/4]" "1")
+            echo "  4) Run backup now"
+            echo "  5) Exit"
+            ACTION=$(prompt "Select option [1/2/3/4/5]" "1")
 
             case "$ACTION" in
                 1)
@@ -917,6 +918,27 @@ main() {
                     # Continue to interactive_config below
                     ;;
                 4)
+                    info "Running backup now..."
+                    echo
+                    if systemctl start pbs-backup.service; then
+                        log "Backup job started"
+                        echo
+                        info "View backup progress with:"
+                        echo "  sudo journalctl -fu pbs-backup.service"
+                        echo
+
+                        # Ask if they want to follow logs
+                        FOLLOW_LOGS=$(prompt "Follow backup logs now? (yes/no)" "yes")
+                        if [[ "$FOLLOW_LOGS" == "yes" ]]; then
+                            journalctl -fu pbs-backup.service
+                        fi
+                    else
+                        error "Failed to start backup job"
+                        info "Check logs with: sudo journalctl -u pbs-backup.service"
+                    fi
+                    exit 0
+                    ;;
+                5)
                     info "Exiting without changes"
                     exit 0
                     ;;

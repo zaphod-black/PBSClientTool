@@ -40,6 +40,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Reduced authentication timeout from 30s to 15s
 - README now includes comprehensive step-by-step walkthrough
 - Prerequisites section expanded with detailed PBS server setup instructions
+- **Default realm changed from "pbs" to "pam"** (more common for root authentication)
+- **Default encryption setting changed from "yes" to "no"** (user can opt-in if needed)
+- Main menu now includes "Run backup now" option for immediate backup testing
 
 ### Fixed
 - **CRITICAL**: SSL fingerprint prompt no longer causes authentication timeout
