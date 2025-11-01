@@ -36,7 +36,7 @@ Interactive bash script that automatically installs and configures Proxmox Backu
 ### Download the script
 
 ```bash
-wget https://raw.githubusercontent.com/YOUR-REPO/pbs-client-installer.sh
+wget https://github.com/zaphod-black/PBSClientInstaller/pbs-client-installer.sh]
 chmod +x pbs-client-installer.sh
 ```
 
