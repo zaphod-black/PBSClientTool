@@ -14,11 +14,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Reinstall option with reconfiguration
   - Exit without changes option
 - 3-step connection verification process:
-  - Step 1: Server reachability test (5s timeout)
-  - Step 2: Authentication test (30s timeout)
+  - Step 1: Server reachability test (5s timeout with curl)
+  - Step 2: Authentication test with automatic SSL fingerprint acceptance
   - Step 3: Datastore access verification
 - Display available block devices when invalid device is entered
 - Step-by-step progress indicators during connection testing
+- `test-connection.sh` - Diagnostic script for testing PBS connections manually
+  - Parameterized for security (no hardcoded credentials)
+  - Tests server reachability, authentication, and datastore access
+  - Handles SSL fingerprint acceptance interactively
 
 ### Changed
 - Installation instructions now use `git clone` instead of `wget`
@@ -27,8 +31,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Block device detection now strips btrfs subvolume notation (e.g., `[/@]`)
 - Connection test succeeds if authentication works, even if no backups exist yet
 - More specific error messages based on which step of connection test fails
+- SSL certificate fingerprints are now automatically accepted during setup
+- Reduced authentication timeout from 30s to 15s
 
 ### Fixed
+- **CRITICAL**: SSL fingerprint prompt no longer causes authentication timeout
+  - Script now automatically accepts SSL fingerprints by piping 'y' to login
+  - This was the root cause of "authentication hanging" issues
 - Script no longer hangs indefinitely when PBS server is unreachable
 - Block device auto-detection now correctly handles btrfs subvolumes
 - Invalid device paths like `/dev/mapper/root[/@]` are now properly cleaned

@@ -516,12 +516,18 @@ test_connection() {
     fi
     log "Server is reachable"
 
-    # Step 2: Test authentication
+    # Step 2: Test authentication and handle SSL fingerprint
     info "Step 2/3: Testing authentication..."
 
     # Use the 'login' command which tests authentication and stores a ticket
+    # Automatically accept SSL fingerprint by piping 'y'
     local test_output
-    if test_output=$(timeout 15 proxmox-backup-client login 2>&1); then
+    if test_output=$(echo "y" | timeout 15 proxmox-backup-client login 2>&1); then
+        # Check if fingerprint was accepted
+        if echo "$test_output" | grep -q "fingerprint:"; then
+            local fingerprint=$(echo "$test_output" | grep "fingerprint:" | head -1 | awk '{print $2}')
+            info "SSL fingerprint accepted: ${fingerprint}"
+        fi
         log "Authentication successful"
     else
         local exit_code=$?
@@ -529,7 +535,7 @@ test_connection() {
 
         if [ $exit_code -eq 124 ]; then
             error "Authentication test timed out"
-            error "Server is reachable but authentication is hanging"
+            error "This might indicate a network issue or server problem"
         else
             error "Authentication failed"
             # Show the actual error from PBS client
@@ -545,12 +551,14 @@ test_connection() {
         error "  - Datastore '${PBS_DATASTORE}' does not exist"
         error "  - User lacks permissions for the datastore"
         error "  - API token is not properly formatted"
+        error "  - SSL certificate issues"
         echo
         info "Troubleshooting:"
         echo "  1. Verify credentials in PBS web interface"
         echo "  2. Check datastore name: ${PBS_DATASTORE}"
         echo "  3. Verify user has backup permissions"
         echo "  4. For API tokens, format is: username@realm!tokenname"
+        echo "  5. Try the test-connection.sh script for detailed diagnostics"
         echo
         info "Debug info:"
         echo "  Repository: ${PBS_REPOSITORY}"

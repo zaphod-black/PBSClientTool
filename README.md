@@ -253,27 +253,71 @@ sudo cp /path/to/saved/encryption-key.json /root/.config/proxmox-backup/
 
 ## Troubleshooting
 
+### Connection Test Script
+
+If you encounter connection issues, use the included diagnostic script:
+
+```bash
+./test-connection.sh <server> <port> <datastore> <username> <realm> <password-or-token>
+```
+
+**Examples:**
+
+With username/password:
+```bash
+./test-connection.sh 192.168.1.181 8007 DEAD-BACKUP root pam mypassword
+```
+
+With API token:
+```bash
+./test-connection.sh 192.168.1.181 8007 DEAD-BACKUP root pam backup-token token-secret-here
+```
+
+The script will:
+- Test server reachability
+- Handle SSL certificate fingerprint acceptance
+- Test authentication
+- Verify datastore access
+- Provide detailed error messages
+
 ### Connection Test Fails
 
-The installer tests the connection with a 30-second timeout. If it fails, you'll see specific error messages:
+The installer tests the connection with a 3-step process:
 
-**Timeout errors** (30+ seconds):
+**Step 1 - Server Reachability (5s timeout):**
 - PBS server is unreachable (check IP/hostname)
 - Firewall blocking port (default: 8007)
 - Network connectivity issues
 
-**Authentication errors** (immediate failure):
+**Step 2 - Authentication (15s timeout):**
 - Invalid credentials (username/password/token)
+- SSL certificate fingerprint issues (automatically handled)
+- API token format errors
+
+**Step 3 - Datastore Access:**
 - Datastore does not exist on server
 - User lacks permissions for the datastore
 
-Check your PBS server is accessible:
+**Quick checks:**
 ```bash
+# Test server reachability
 ping 192.168.1.181
 curl -k https://192.168.1.181:8007
+
+# Verify credentials in PBS web interface
+# Check datastore name matches exactly
 ```
 
-Verify credentials on PBS web interface.
+**SSL Certificate Fingerprints:**
+
+The installer automatically accepts SSL fingerprints during setup. If you need to manually accept a fingerprint:
+
+```bash
+export PBS_REPOSITORY="root@pam@192.168.1.181:8007:DEAD-BACKUP"
+export PBS_PASSWORD="your-password"
+proxmox-backup-client login
+# Answer 'y' when prompted to accept the fingerprint
+```
 
 ### Installation Fails on Ubuntu 22.04
 
