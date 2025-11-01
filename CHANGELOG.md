@@ -34,6 +34,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Invalid device paths like `/dev/mapper/root[/@]` are now properly cleaned
 - Connection test now differentiates between network issues and authentication failures
 - Shows actual PBS client error messages when authentication fails
+- Authentication test now uses correct `login` command instead of non-existent `status` command
+- Connection test no longer times out due to using wrong PBS client commands
 
 ## [1.0.0] - 2025-11-01
 
