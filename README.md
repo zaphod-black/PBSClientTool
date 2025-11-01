@@ -24,12 +24,54 @@ Interactive bash script that automatically installs and configures Proxmox Backu
 - `yay` AUR helper must be installed
 - Install yay first: https://github.com/Jguer/yay
 
-### Before Running
-- Have your PBS server details ready:
-  - Server IP/hostname (e.g., 192.168.1.181)
-  - Port (default: 8007)
-  - Datastore name
-  - Authentication credentials (username/password or API token)
+### Before Running - PBS Server Setup
+
+#### 1. Create API Token (Recommended)
+
+API tokens are the recommended authentication method for automated backups. They're more secure than passwords and don't expire.
+
+**In PBS Web Interface:**
+
+1. Login to your PBS server (e.g., https://192.168.1.181:8007)
+2. Go to **Configuration → Access Control → API Tokens**
+3. Click **Add**
+4. Fill in:
+   - **User:** `root@pam` (or your backup user)
+   - **Token ID:** `backupAutomations` (or any name you prefer)
+   - **Privilege Separation:** Leave **unchecked** for full user permissions
+5. Click **Add**
+6. **IMPORTANT:** Copy the **Secret** immediately - it's only shown once!
+   - Format: `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`
+
+#### 2. Configure Datastore Permissions
+
+Your API token needs backup permissions on the datastore:
+
+1. Go to **Configuration → Access Control → Permissions**
+2. Click **Add → User Permission**
+3. Fill in:
+   - **Path:** `/datastore/YOUR-DATASTORE-NAME`
+   - **User:** `root@pam!backupAutomations` (your token)
+   - **Role:** `DatastoreBackup` (or `DatastoreAdmin` for full access)
+4. Click **Add**
+
+**Common Permission Error:**
+```
+Error: permission check failed - missing Datastore.Audit|Datastore.Backup
+```
+This means the token lacks permissions. Double-check the permission settings above.
+
+#### 3. Gather Information
+
+Have these details ready before running the installer:
+- **Server IP/hostname:** (e.g., 192.168.1.181)
+- **Port:** (default: 8007)
+- **Datastore name:** (exactly as shown in PBS, e.g., DEAD-BACKUP)
+- **API Token:**
+  - Username: `root`
+  - Realm: `pam`
+  - Token name: `backupAutomations`
+  - Token secret: (the secret you copied earlier)
 
 ## Installation
 
@@ -46,6 +88,195 @@ chmod +x pbs-client-installer.sh
 ```bash
 sudo ./pbs-client-installer.sh
 ```
+
+## Step-by-Step Walkthrough
+
+This walkthrough shows a complete installation using API token authentication (recommended).
+
+### Step 1: Run the Installer
+
+```bash
+sudo ./pbs-client-installer.sh
+```
+
+If PBS client is already installed, you'll see options. Choose `1` to configure or `2` to reinstall.
+
+### Step 2: PBS Server Configuration
+
+Enter your server details:
+
+```
+Enter PBS server IP/hostname [192.168.1.181]: 192.168.1.181
+Enter PBS server port [8007]: 8007
+Enter datastore name [backups]: DEAD-BACKUP
+```
+
+**Important:** The datastore name must match **exactly** as shown in your PBS web interface.
+
+### Step 3: Authentication Method
+
+Choose API Token (option 2):
+
+```
+Authentication Method:
+  1) Username + Password
+  2) API Token (recommended for automation)
+Select authentication method [1/2] [2]: 2
+```
+
+**Why API Tokens?**
+- More secure than passwords
+- Don't expire
+- Can be easily revoked without changing passwords
+- Recommended for automated/scheduled backups
+
+### Step 4: Enter API Token Details
+
+```
+Enter username [backup]: root
+Enter realm [pbs]: pam
+Enter token name [backup-token]: backupAutomations
+Enter token secret: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+```
+
+**Note:** The token secret won't be displayed as you type (for security).
+
+### Step 5: Backup Configuration
+
+Choose your backup type:
+
+```
+Backup Type:
+  1) File-level only (.pxar) - Fast, efficient, selective restore
+  2) Block device only (.img) - Full disk image, bootable as VM
+  3) Both (Hybrid) - Daily files + Weekly block device (recommended)
+Select backup type [1/2/3] [3]: 3
+```
+
+**Recommendation:** Option 3 (Both) gives you:
+- Daily file-level backups (fast, efficient)
+- Weekly block device backups (full system image)
+
+### Step 6: File Backup Paths
+
+```
+Enter paths to backup (space-separated) [/]: /
+Enter exclusion patterns (space-separated) [/tmp /var/tmp /var/cache /proc /sys /dev /run]:
+```
+
+Press Enter to accept defaults, or customize as needed.
+
+### Step 7: Block Device Selection
+
+The script auto-detects your root device:
+
+```
+[INFO] Auto-detected root device: /dev/mapper/root
+Enter block device to backup [/dev/mapper/root]:
+```
+
+Press Enter to accept, or enter a different device (e.g., `/dev/sda`, `/dev/nvme0n1`).
+
+**Common devices:**
+- `/dev/sda` - First SATA/SCSI drive
+- `/dev/nvme0n1` - First NVMe drive
+- `/dev/vda` - Virtual disk (VM)
+- `/dev/mapper/root` - LVM/encrypted volume
+
+### Step 8: Backup Schedule
+
+```
+Backup Schedule:
+  1) Hourly
+  2) Daily (recommended)
+  3) Weekly
+  4) Custom
+Select schedule type [1/2/3/4] [2]: 2
+Enter hour for daily backup (0-23) [2]: 2
+```
+
+**Note:** If you selected "Both" backup type:
+- File backups run on this schedule (e.g., daily at 2 AM)
+- Block device backups run weekly on Sunday
+
+### Step 9: Retention Policy
+
+```
+Keep last N backups [3]: 3
+Keep daily backups for N days [7]: 7
+Keep weekly backups for N weeks [4]: 4
+Keep monthly backups for N months [6]: 6
+```
+
+These settings determine how long backups are kept before automatic pruning.
+
+### Step 10: Encryption
+
+```
+Enable encryption? (yes/no) [yes]: yes
+```
+
+**If you enable encryption:**
+- A unique encryption key is generated
+- Paper backup saved to `/root/pbs-encryption-key-YYYYMMDD.txt`
+- **Print and store this securely** - lost keys = lost data!
+
+### Step 11: Connection Test
+
+The installer will test your connection in 3 steps:
+
+```
+[INFO] Step 1/3: Checking if server is reachable...
+[INFO] Server is reachable
+[INFO] Step 2/3: Testing authentication...
+[INFO] SSL fingerprint accepted: a1:41:69:b7:...
+[INFO] Authentication successful
+[INFO] Step 3/3: Verifying datastore access...
+[INFO] Datastore access verified
+[INFO] Connection test successful!
+```
+
+**If Step 2 fails with permission error:**
+- Go back to PBS web interface
+- Verify API token has `DatastoreBackup` permission on your datastore
+- See "Prerequisites → Configure Datastore Permissions" section above
+
+### Step 12: Service Creation
+
+The installer creates systemd service and timer:
+
+```
+[INFO] Creating systemd service and timer...
+[INFO] Systemd service and timer created successfully
+```
+
+### Step 13: Optional Immediate Backup
+
+```
+Do you want to run a backup now? (yes/no) [no]: yes
+[INFO] Starting immediate backup...
+```
+
+Choose `yes` to test your backup immediately, or `no` to wait for the scheduled time.
+
+### Step 14: Completion
+
+```
+======================================
+  Installation Complete!
+======================================
+
+Configuration Summary:
+  PBS Server: 192.168.1.181:8007
+  Datastore: DEAD-BACKUP
+  Repository: root@pam!backupAutomations@192.168.1.181:8007:DEAD-BACKUP
+  Backup Type: both
+  Backup Paths: /
+  Block Device: /dev/mapper/root
+  Schedule: Files daily (02:00:00), Block device weekly (Sunday)
+```
+
+**Your backups are now configured!** 🎉
 
 ### Reconfiguration
 

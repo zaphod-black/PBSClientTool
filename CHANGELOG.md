@@ -23,6 +23,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Parameterized for security (no hardcoded credentials)
   - Tests server reachability, authentication, and datastore access
   - Handles SSL fingerprint acceptance interactively
+- Comprehensive documentation in README:
+  - Step-by-step walkthrough of complete installation (14 steps)
+  - PBS server setup guide (API token creation and permissions)
+  - Common permission error troubleshooting
+  - Explanation of backup types, schedules, and retention policies
 
 ### Changed
 - Installation instructions now use `git clone` instead of `wget`
@@ -33,6 +38,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - More specific error messages based on which step of connection test fails
 - SSL certificate fingerprints are now automatically accepted during setup
 - Reduced authentication timeout from 30s to 15s
+- README now includes comprehensive step-by-step walkthrough
+- Prerequisites section expanded with detailed PBS server setup instructions
 
 ### Fixed
 - **CRITICAL**: SSL fingerprint prompt no longer causes authentication timeout
