@@ -795,25 +795,47 @@ EOF
 run_backup_now() {
     echo
     RUN_NOW=$(prompt "Do you want to run a backup now? (yes/no)" "no")
-    
+
     if [[ "$RUN_NOW" == "yes" ]]; then
         log "Starting immediate backup..."
         echo
-        
-        if systemctl start pbs-backup.service; then
-            log "Backup job started"
+
+        # Start the backup
+        systemctl start pbs-backup.service
+
+        # Wait a moment for service to start
+        sleep 1
+
+        # Show real-time progress
+        echo "╔════════════════════════════════════════════════════════════╗"
+        echo "║  Backup Progress (Live)                                    ║"
+        echo "║  Press Ctrl+C to exit (backup continues in background)    ║"
+        echo "╚════════════════════════════════════════════════════════════╝"
+        echo
+
+        # Follow logs to show progress
+        timeout 3600 journalctl -fu pbs-backup.service &
+        JOURNAL_PID=$!
+
+        # Wait for the service to complete or fail
+        while systemctl is-active --quiet pbs-backup.service; do
+            sleep 2
+        done
+
+        # Kill the journal follow
+        kill $JOURNAL_PID 2>/dev/null || true
+        wait $JOURNAL_PID 2>/dev/null || true
+
+        echo
+        echo "════════════════════════════════════════════════════════════"
+
+        # Check final status
+        if systemctl status pbs-backup.service | grep -q "Active: failed"; then
             echo
-            info "View backup progress with:"
-            echo "  sudo journalctl -fu pbs-backup.service"
-            echo
-            
-            # Ask if they want to follow logs
-            FOLLOW_LOGS=$(prompt "Follow backup logs now? (yes/no)" "yes")
-            if [[ "$FOLLOW_LOGS" == "yes" ]]; then
-                journalctl -fu pbs-backup.service
-            fi
+            error "Backup failed!"
         else
-            error "Failed to start backup job"
+            echo
+            log "Backup completed successfully!"
         fi
     fi
 }
@@ -927,22 +949,54 @@ main() {
                 4)
                     info "Running backup now..."
                     echo
-                    if systemctl start pbs-backup.service; then
-                        log "Backup job started"
-                        echo
-                        info "View backup progress with:"
-                        echo "  sudo journalctl -fu pbs-backup.service"
-                        echo
 
-                        # Ask if they want to follow logs
-                        FOLLOW_LOGS=$(prompt "Follow backup logs now? (yes/no)" "yes")
-                        if [[ "$FOLLOW_LOGS" == "yes" ]]; then
-                            journalctl -fu pbs-backup.service
-                        fi
+                    # Start the backup
+                    systemctl start pbs-backup.service
+
+                    # Wait a moment for service to start
+                    sleep 1
+
+                    # Show real-time progress
+                    echo "╔════════════════════════════════════════════════════════════╗"
+                    echo "║  Backup Progress (Live)                                    ║"
+                    echo "║  Press Ctrl+C to exit (backup continues in background)    ║"
+                    echo "╚════════════════════════════════════════════════════════════╝"
+                    echo
+
+                    # Follow logs to show progress
+                    # Using timeout to automatically stop after backup completes
+                    timeout 3600 journalctl -fu pbs-backup.service &
+                    JOURNAL_PID=$!
+
+                    # Wait for the service to complete or fail
+                    while systemctl is-active --quiet pbs-backup.service; do
+                        sleep 2
+                    done
+
+                    # Kill the journal follow
+                    kill $JOURNAL_PID 2>/dev/null || true
+                    wait $JOURNAL_PID 2>/dev/null || true
+
+                    echo
+                    echo "════════════════════════════════════════════════════════════"
+
+                    # Check final status
+                    if systemctl status pbs-backup.service | grep -q "Active: failed"; then
+                        echo
+                        error "Backup failed!"
+                        echo
+                        info "Check full logs with:"
+                        echo "  sudo journalctl -u pbs-backup.service -n 50"
                     else
-                        error "Failed to start backup job"
-                        info "Check logs with: sudo journalctl -u pbs-backup.service"
+                        echo
+                        log "Backup completed successfully!"
+                        echo
+                        info "View backup snapshots with:"
+                        echo "  export PBS_REPOSITORY='$PBS_REPOSITORY'"
+                        echo "  export PBS_PASSWORD='***'"
+                        echo "  sudo -E proxmox-backup-client snapshot list"
                     fi
+
                     exit 0
                     ;;
                 5)

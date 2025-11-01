@@ -28,6 +28,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - PBS server setup guide (API token creation and permissions)
   - Common permission error troubleshooting
   - Explanation of backup types, schedules, and retention policies
+- **Live backup progress monitoring**
+  - Real-time log following when running backups
+  - Automatic completion detection
+  - Shows PBS client's built-in progress bars and statistics
+  - Can exit with Ctrl+C (backup continues in background)
+  - Applied to both "Run backup now" menu option and post-install backup
 
 ### Changed
 - Installation instructions now use `git clone` instead of `wget`
