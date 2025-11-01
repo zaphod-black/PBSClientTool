@@ -323,6 +323,176 @@ EOF
     info "All other backup settings remain unchanged."
 }
 
+# Reconfigure backup settings only (type, schedule, retention)
+reconfigure_backup_settings() {
+    log "Reconfiguring backup settings..."
+    echo
+
+    # Load existing configuration to preserve connection details
+    if [ -f "$CONFIG_DIR/config" ]; then
+        source "$CONFIG_DIR/config"
+    else
+        error "No existing configuration found. Please run full configuration."
+        exit 1
+    fi
+
+    # Preserve connection details
+    local SAVED_PBS_REPOSITORY="$PBS_REPOSITORY"
+    local SAVED_PBS_PASSWORD="$PBS_PASSWORD"
+
+    # Backup type selection
+    info "Backup Type:"
+    echo "  1) File-level only (.pxar) - Fast, efficient, selective restore"
+    echo "  2) Block device only (.img) - Full disk image, bootable as VM"
+    echo "  3) Both (Hybrid) - Daily files + Weekly block device (recommended)"
+
+    local CURRENT_BACKUP_TYPE_NUM=""
+    case "$BACKUP_TYPE" in
+        files) CURRENT_BACKUP_TYPE_NUM="1" ;;
+        block) CURRENT_BACKUP_TYPE_NUM="2" ;;
+        both) CURRENT_BACKUP_TYPE_NUM="3" ;;
+    esac
+
+    BACKUP_TYPE_CHOICE=$(prompt "Select backup type [1/2/3]" "$CURRENT_BACKUP_TYPE_NUM")
+
+    case "$BACKUP_TYPE_CHOICE" in
+        1)
+            BACKUP_TYPE="files"
+            ;;
+        2)
+            BACKUP_TYPE="block"
+            ;;
+        3)
+            BACKUP_TYPE="both"
+            ;;
+        *)
+            warn "Invalid choice, keeping current setting: $BACKUP_TYPE"
+            ;;
+    esac
+
+    echo
+    # Backup configuration
+    info "Backup Configuration:"
+
+    if [[ "$BACKUP_TYPE" == "files" ]] || [[ "$BACKUP_TYPE" == "both" ]]; then
+        BACKUP_PATHS=$(prompt "Enter paths to backup (space-separated)" "$BACKUP_PATHS")
+        EXCLUDE_PATTERNS=$(prompt "Enter exclusion patterns (space-separated)" "$EXCLUDE_PATTERNS")
+    fi
+
+    if [[ "$BACKUP_TYPE" == "block" ]] || [[ "$BACKUP_TYPE" == "both" ]]; then
+        echo
+        info "Block Device Configuration:"
+        info "Current device: ${BLOCK_DEVICE:-none}"
+
+        # Try to auto-detect root device if none set
+        if [ -z "$BLOCK_DEVICE" ]; then
+            ROOT_DEVICE=$(findmnt -n -o SOURCE / | sed 's/\[.*\]$//' | sed 's/[0-9]*$//' | sed 's/p$//' 2>/dev/null || echo "")
+            if [ -n "$ROOT_DEVICE" ] && [ -b "$ROOT_DEVICE" ]; then
+                BLOCK_DEVICE="$ROOT_DEVICE"
+            fi
+        fi
+
+        BLOCK_DEVICE=$(prompt "Enter block device to backup" "$BLOCK_DEVICE")
+
+        # Verify it's a block device
+        if [ ! -b "$BLOCK_DEVICE" ]; then
+            warn "Warning: $BLOCK_DEVICE does not exist or is not a block device"
+            info "Available block devices:"
+            lsblk -d -n -o NAME,SIZE,TYPE | grep disk | awk '{print "  /dev/"$1" ("$2")"}'
+            echo
+            CONTINUE=$(prompt "Continue anyway? (yes/no)" "no")
+            if [[ "$CONTINUE" != "yes" ]]; then
+                error "Configuration cancelled"
+                return 1
+            fi
+        fi
+    fi
+
+    echo
+    info "Backup Schedule:"
+    echo "  1) Hourly"
+    echo "  2) Daily (recommended)"
+    echo "  3) Weekly"
+    echo "  4) Custom"
+    SCHEDULE_TYPE=$(prompt "Select schedule type [1/2/3/4]" "2")
+
+    case "$SCHEDULE_TYPE" in
+        1)
+            TIMER_SCHEDULE="hourly"
+            TIMER_ONCALENDAR="hourly"
+            ;;
+        2)
+            BACKUP_HOUR=$(prompt "Enter hour for daily backup (0-23)" "2")
+            TIMER_SCHEDULE="daily"
+            TIMER_ONCALENDAR="*-*-* ${BACKUP_HOUR}:00:00"
+            ;;
+        3)
+            BACKUP_DOW=$(prompt "Enter day of week (Mon-Sun)" "Sun")
+            BACKUP_HOUR=$(prompt "Enter hour (0-23)" "2")
+            TIMER_SCHEDULE="weekly"
+            TIMER_ONCALENDAR="${BACKUP_DOW} *-*-* ${BACKUP_HOUR}:00:00"
+            ;;
+        4)
+            TIMER_ONCALENDAR=$(prompt "Enter systemd OnCalendar format" "*-*-* 02:00:00")
+            TIMER_SCHEDULE="custom"
+            ;;
+    esac
+
+    echo
+    # Retention policy
+    info "Retention Policy:"
+    KEEP_LAST=$(prompt "Keep last N backups" "${KEEP_LAST:-3}")
+    KEEP_DAILY=$(prompt "Keep daily backups for N days" "${KEEP_DAILY:-7}")
+    KEEP_WEEKLY=$(prompt "Keep weekly backups for N weeks" "${KEEP_WEEKLY:-4}")
+    KEEP_MONTHLY=$(prompt "Keep monthly backups for N months" "${KEEP_MONTHLY:-6}")
+
+    # Restore connection details
+    PBS_REPOSITORY="$SAVED_PBS_REPOSITORY"
+    PBS_PASSWORD="$SAVED_PBS_PASSWORD"
+
+    # Regenerate systemd service with new settings
+    echo
+    log "Updating systemd service configuration..."
+    create_systemd_service
+
+    # Restart services
+    log "Restarting backup timer..."
+    systemctl daemon-reload
+    systemctl restart pbs-backup.timer
+
+    echo
+    log "Backup settings updated successfully!"
+    echo
+    info "New Configuration:"
+    echo "  Backup Type: ${BACKUP_TYPE}"
+
+    if [[ "$BACKUP_TYPE" == "files" ]] || [[ "$BACKUP_TYPE" == "both" ]]; then
+        echo "  Backup Paths: ${BACKUP_PATHS}"
+    fi
+
+    if [[ "$BACKUP_TYPE" == "block" ]] || [[ "$BACKUP_TYPE" == "both" ]]; then
+        echo "  Block Device: ${BLOCK_DEVICE}"
+    fi
+
+    if [[ "$BACKUP_TYPE" == "both" ]]; then
+        echo "  Schedule: Files ${TIMER_SCHEDULE} (${TIMER_ONCALENDAR}), Block device weekly (Sunday)"
+    else
+        echo "  Schedule: ${TIMER_SCHEDULE} (${TIMER_ONCALENDAR})"
+    fi
+
+    echo "  Retention: Last=${KEEP_LAST} Daily=${KEEP_DAILY} Weekly=${KEEP_WEEKLY} Monthly=${KEEP_MONTHLY}"
+    echo
+
+    # Show service status
+    info "Backup Service Status:"
+    echo "────────────────────────────────────────────────────────────"
+    systemctl status pbs-backup.timer --no-pager -l || true
+    echo "────────────────────────────────────────────────────────────"
+    echo
+    info "Next scheduled backup:"
+    systemctl list-timers pbs-backup.timer --no-pager || true
+}
+
 # Interactive configuration
 interactive_config() {
     log "Starting interactive configuration..."
@@ -926,8 +1096,9 @@ main() {
             echo "  2) Full reconfiguration (all settings)"
             echo "  3) Reinstall PBS client and reconfigure"
             echo "  4) Run backup now"
-            echo "  5) Exit"
-            ACTION=$(prompt "Select option [1/2/3/4/5]" "1")
+            echo "  5) Modify backup schedule/type"
+            echo "  6) Exit"
+            ACTION=$(prompt "Select option [1/2/3/4/5/6]" "1")
 
             case "$ACTION" in
                 1)
@@ -1007,6 +1178,11 @@ main() {
                     exit 0
                     ;;
                 5)
+                    info "Modifying backup schedule and type..."
+                    reconfigure_backup_settings
+                    exit 0
+                    ;;
+                6)
                     info "Exiting without changes"
                     exit 0
                     ;;
