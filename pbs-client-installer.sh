@@ -235,6 +235,90 @@ install_pbs_client() {
     fi
 }
 
+# Reconfigure connection only (PBS server and credentials)
+reconfigure_connection() {
+    log "Reconfiguring PBS server connection..."
+    echo
+    echo "======================================"
+    echo "  PBS Server Connection Setup"
+    echo "======================================"
+    echo
+
+    # PBS Server details
+    PBS_SERVER=$(prompt "Enter PBS server IP/hostname" "192.168.1.181")
+    PBS_PORT=$(prompt "Enter PBS server port" "8007")
+    PBS_DATASTORE=$(prompt "Enter datastore name" "backups")
+
+    echo
+    info "Authentication Method:"
+    echo "  1) Username + Password"
+    echo "  2) API Token (recommended for automation)"
+    AUTH_METHOD=$(prompt "Select authentication method [1/2]" "2")
+
+    if [ "$AUTH_METHOD" = "1" ]; then
+        PBS_USERNAME=$(prompt "Enter username" "root")
+        PBS_REALM=$(prompt "Enter realm" "pam")
+        PBS_PASSWORD=$(prompt_password "Enter password")
+        PBS_REPOSITORY="${PBS_USERNAME}@${PBS_REALM}@${PBS_SERVER}:${PBS_PORT}:${PBS_DATASTORE}"
+    else
+        PBS_USERNAME=$(prompt "Enter username" "backup")
+        PBS_REALM=$(prompt "Enter realm" "pbs")
+        PBS_TOKEN_NAME=$(prompt "Enter token name" "backup-token")
+        PBS_TOKEN_SECRET=$(prompt_password "Enter token secret")
+        PBS_REPOSITORY="${PBS_USERNAME}@${PBS_REALM}!${PBS_TOKEN_NAME}@${PBS_SERVER}:${PBS_PORT}:${PBS_DATASTORE}"
+        PBS_PASSWORD="$PBS_TOKEN_SECRET"
+    fi
+
+    # Test the new connection
+    if ! test_connection; then
+        error "Connection test failed with new credentials"
+        RETRY=$(prompt "Try again? (yes/no)" "yes")
+        if [[ "$RETRY" == "yes" ]]; then
+            reconfigure_connection
+            return
+        else
+            error "Cannot proceed without successful connection"
+            exit 1
+        fi
+    fi
+
+    # Load existing configuration and update only connection details
+    if [ -f "$CONFIG_DIR/config" ]; then
+        log "Loading existing backup configuration..."
+        source "$CONFIG_DIR/config"
+    else
+        error "No existing configuration found. Please run full configuration."
+        exit 1
+    fi
+
+    # Update config file with new connection details
+    log "Updating configuration file..."
+    cat > "$CONFIG_DIR/config" <<EOF
+# PBS Client Configuration
+PBS_REPOSITORY="${PBS_REPOSITORY}"
+PBS_PASSWORD="${PBS_PASSWORD}"
+BACKUP_TYPE="${BACKUP_TYPE}"
+BACKUP_PATHS="${BACKUP_PATHS}"
+EXCLUDE_PATTERNS="${EXCLUDE_PATTERNS}"
+BLOCK_DEVICE="${BLOCK_DEVICE}"
+KEEP_LAST=${KEEP_LAST}
+KEEP_DAILY=${KEEP_DAILY}
+KEEP_WEEKLY=${KEEP_WEEKLY}
+KEEP_MONTHLY=${KEEP_MONTHLY}
+EOF
+
+    chmod 600 "$CONFIG_DIR/config"
+
+    log "Connection configuration updated successfully!"
+    echo
+    info "Updated Connection:"
+    echo "  PBS Server: ${PBS_SERVER}:${PBS_PORT}"
+    echo "  Datastore: ${PBS_DATASTORE}"
+    echo "  Repository: ${PBS_REPOSITORY}"
+    echo
+    info "All other backup settings remain unchanged."
+}
+
 # Interactive configuration
 interactive_config() {
     log "Starting interactive configuration..."
@@ -243,7 +327,7 @@ interactive_config() {
     echo "  PBS Client Configuration"
     echo "======================================"
     echo
-    
+
     # PBS Server details
     PBS_SERVER=$(prompt "Enter PBS server IP/hostname" "192.168.1.181")
     PBS_PORT=$(prompt "Enter PBS server port" "8007")
@@ -714,41 +798,108 @@ main() {
     
     # Check root
     check_root
-    
+
     # Detect distribution
     detect_distro
-    
+
     # Check if PBS client is already installed
     if command -v proxmox-backup-client &> /dev/null; then
         warn "Proxmox Backup Client is already installed"
-        REINSTALL=$(prompt "Do you want to reinstall? (yes/no)" "no")
-        if [[ "$REINSTALL" != "yes" ]]; then
-            info "Skipping installation, proceeding to configuration..."
+
+        # Check if configuration exists
+        if [ -f "$CONFIG_DIR/config" ]; then
+            info "Existing configuration detected"
+            echo
+            echo "What would you like to do?"
+            echo "  1) Reconfigure connection only (server/credentials)"
+            echo "  2) Full reconfiguration (all settings)"
+            echo "  3) Reinstall PBS client and reconfigure"
+            echo "  4) Exit"
+            ACTION=$(prompt "Select option [1/2/3/4]" "1")
+
+            case "$ACTION" in
+                1)
+                    info "Reconfiguring connection only..."
+                    reconfigure_connection
+                    # Skip most of the setup, just restart services
+                    systemctl daemon-reload
+                    systemctl restart pbs-backup.timer
+                    log "Configuration updated and services restarted!"
+                    echo
+                    info "Your backup schedule and settings remain unchanged."
+                    exit 0
+                    ;;
+                2)
+                    info "Proceeding with full reconfiguration..."
+                    # Continue to interactive_config below
+                    ;;
+                3)
+                    info "Reinstalling PBS client..."
+                    install_pbs_client
+                    # Continue to interactive_config below
+                    ;;
+                4)
+                    info "Exiting without changes"
+                    exit 0
+                    ;;
+                *)
+                    error "Invalid option"
+                    exit 1
+                    ;;
+            esac
         else
-            install_pbs_client
+            # PBS client installed but no config
+            info "No existing configuration found"
+            echo
+            echo "What would you like to do?"
+            echo "  1) Configure PBS client"
+            echo "  2) Reinstall and configure"
+            echo "  3) Exit"
+            ACTION=$(prompt "Select option [1/2/3]" "1")
+
+            case "$ACTION" in
+                1)
+                    info "Proceeding with configuration..."
+                    # Continue to interactive_config below
+                    ;;
+                2)
+                    info "Reinstalling PBS client..."
+                    install_pbs_client
+                    # Continue to interactive_config below
+                    ;;
+                3)
+                    info "Exiting without changes"
+                    exit 0
+                    ;;
+                *)
+                    error "Invalid option"
+                    exit 1
+                    ;;
+            esac
         fi
     else
+        # PBS client not installed
         install_pbs_client
     fi
-    
+
     # Interactive configuration
     interactive_config
-    
+
     # Create encryption key
     create_encryption_key
-    
+
     # Test connection
     if ! test_connection; then
         error "Cannot proceed without successful connection to PBS"
         exit 1
     fi
-    
+
     # Create systemd service
     create_systemd_service
-    
+
     # Offer to run backup now
     run_backup_now
-    
+
     # Show summary
     show_summary
 }
