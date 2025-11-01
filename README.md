@@ -47,6 +47,29 @@ chmod +x pbs-client-installer.sh
 sudo ./pbs-client-installer.sh
 ```
 
+### Reconfiguration
+
+If PBS client is already installed, the script will detect this and offer you options:
+
+**With existing configuration:**
+- **Reconfigure connection only** - Quick update of PBS server IP/credentials only
+- **Full reconfiguration** - Redo all settings (paths, schedules, retention, etc.)
+- **Reinstall PBS client and reconfigure** - Complete reinstall
+- **Exit without changes**
+
+**Without existing configuration:**
+- **Configure PBS client** - Set up for the first time
+- **Reinstall and configure** - Fresh installation
+- **Exit without changes**
+
+The connection-only reconfiguration is perfect for:
+- Switching to a different backup server
+- Updating expired API tokens
+- Changing authentication methods
+- Updating datastore names
+
+All backup settings (paths, schedules, retention policies) are preserved.
+
 ## Usage Example
 
 The script will interactively prompt you for:
@@ -231,6 +254,18 @@ sudo cp /path/to/saved/encryption-key.json /root/.config/proxmox-backup/
 ## Troubleshooting
 
 ### Connection Test Fails
+
+The installer tests the connection with a 30-second timeout. If it fails, you'll see specific error messages:
+
+**Timeout errors** (30+ seconds):
+- PBS server is unreachable (check IP/hostname)
+- Firewall blocking port (default: 8007)
+- Network connectivity issues
+
+**Authentication errors** (immediate failure):
+- Invalid credentials (username/password/token)
+- Datastore does not exist on server
+- User lacks permissions for the datastore
 
 Check your PBS server is accessible:
 ```bash
