@@ -45,6 +45,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **CRITICAL**: SSL fingerprint prompt no longer causes authentication timeout
   - Script now automatically accepts SSL fingerprints by piping 'y' to login
   - This was the root cause of "authentication hanging" issues
+- **CRITICAL**: Password/token capture no longer includes newline character
+  - `prompt_password()` function now outputs formatting to stderr
+  - Fixes "authentication failed - invalid credentials" in backup service
+  - Config file now has properly formatted single-line passwords
 - Script no longer hangs indefinitely when PBS server is unreachable
 - Block device auto-detection now correctly handles btrfs subvolumes
 - Invalid device paths like `/dev/mapper/root[/@]` are now properly cleaned

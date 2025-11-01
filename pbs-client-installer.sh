@@ -51,7 +51,7 @@ prompt_password() {
     local prompt_text="$1"
     local user_input
     read -sp "$(echo -e ${BLUE}${prompt_text}${NC}: )" user_input
-    echo
+    echo >&2  # Output newline to stderr so it doesn't get captured
     echo "$user_input"
 }
 
