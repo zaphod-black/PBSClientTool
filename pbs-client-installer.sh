@@ -1018,8 +1018,7 @@ run_backup_now() {
         MONITOR_PID=$!
 
         # Follow logs in foreground from the start (will be killed by monitor when backup completes)
-        # Use --since to catch logs from service start, and -n 100 to show recent context
-        journalctl -u pbs-backup-manual.service -f --since "5 seconds ago" -n 100 2>/dev/null || true
+        journalctl -u pbs-backup-manual.service -f --since "2 seconds ago" || true
 
         # Wait for monitor to finish
         wait $MONITOR_PID 2>/dev/null
@@ -1174,8 +1173,7 @@ main() {
                     MONITOR_PID=$!
 
                     # Follow logs in foreground from the start (will be killed by monitor when backup completes)
-                    # Use --since to catch logs from service start, and -n 100 to show recent context
-                    journalctl -u pbs-backup-manual.service -f --since "5 seconds ago" -n 100 2>/dev/null || true
+                    journalctl -u pbs-backup-manual.service -f --since "2 seconds ago" || true
 
                     # Wait for monitor to finish
                     wait $MONITOR_PID 2>/dev/null
