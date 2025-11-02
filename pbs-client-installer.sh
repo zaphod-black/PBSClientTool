@@ -123,6 +123,58 @@ resolve_target_input() {
     return 0
 }
 
+# Quick authentication test for a single target (minimal output)
+quick_test_target() {
+    local target_name="$1"
+    local config_file="$(get_target_config_path "$target_name")"
+
+    if [ ! -f "$config_file" ]; then
+        return 1
+    fi
+
+    # Source config in subshell to avoid polluting environment
+    (
+        source "$config_file"
+        export PBS_REPOSITORY
+        export PBS_PASSWORD
+
+        # Quick auth test - just try to login
+        echo "y" | timeout 5 proxmox-backup-client login >/dev/null 2>&1
+    )
+    return $?
+}
+
+# Test all configured targets and display status
+test_all_targets() {
+    if ! list_targets >/dev/null 2>&1; then
+        return 0
+    fi
+
+    echo
+    echo "════════════════════════════════════════"
+    echo "  Testing Backup Target Connections"
+    echo "════════════════════════════════════════"
+    echo
+
+    local all_ok=true
+    while IFS= read -r target; do
+        printf "  %-20s " "$target:"
+
+        if quick_test_target "$target"; then
+            echo "✓ Connected"
+        else
+            echo "✗ Failed"
+            all_ok=false
+        fi
+    done < <(list_targets)
+
+    echo
+    if [ "$all_ok" = false ]; then
+        warn "Some targets failed connection test"
+        info "Use option 3 (Edit target) to fix connection issues"
+    fi
+}
+
 migrate_legacy_config() {
     # Check if old single-target config exists
     if [ -f "$CONFIG_DIR/config" ] && [ ! -d "$TARGETS_DIR" ]; then
@@ -1965,6 +2017,7 @@ main() {
         # Check if any targets exist
         if list_targets >/dev/null 2>&1; then
             show_targets_list
+            test_all_targets
 
             # Main menu loop
             while true; do

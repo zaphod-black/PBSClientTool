@@ -119,6 +119,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Manual backups always include block device even on non-Sunday
 - Script version bumped to 1.1.0 for multi-target support
 
+### Added
+- **Automatic connection testing at startup**
+  - All configured targets are automatically tested when script starts
+  - Quick authentication check (5 second timeout per target)
+  - Shows connection status: ✓ Connected or ✗ Failed
+  - Helps identify configuration issues before running backups
+  - Warns user if any targets have connection problems
+  - Runs in subshell to avoid environment pollution
+
 ### Changed
 - **Improved menu flow for viewing target details**
   - "View target details" moved from main menu option 6 to sub-menu under "List all backup targets"
