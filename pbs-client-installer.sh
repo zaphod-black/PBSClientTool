@@ -1801,88 +1801,60 @@ main() {
 
             case "$ACTION" in
                 1)
-                    info "Reconfiguring connection only..."
-                    reconfigure_connection
-                    # Skip most of the setup, just restart services
-                    systemctl daemon-reload
-                    systemctl restart pbs-backup.timer
-                    log "Configuration updated and services restarted!"
-                    echo
-                    info "Your backup schedule and settings remain unchanged."
+                    show_targets_list
                     exit 0
                     ;;
                 2)
-                    info "Proceeding with full reconfiguration..."
-                    # Continue to interactive_config below
+                    add_target
+                    exit 0
                     ;;
                 3)
-                    info "Reinstalling PBS client..."
-                    install_pbs_client
-                    # Continue to interactive_config below
+                    edit_target
+                    exit 0
                     ;;
                 4)
-                    info "Running FULL backup now (files + block device)..."
-                    echo
-
-                    # Show real-time progress
-                    echo "╔════════════════════════════════════════════════════════════╗"
-                    echo "║  Backup Progress (Live)                                    ║"
-                    echo "║  Press Ctrl+C to exit (backup continues in background)    ║"
-                    echo "╚════════════════════════════════════════════════════════════╝"
-                    echo
-
-                    # Start the manual backup (forces full backup)
-                    systemctl start pbs-backup-manual.service &
-
-                    # Wait a brief moment for service to register
-                    sleep 0.5
-
-                    # Monitor backup in background and kill journalctl when done
-                    (
-                        while systemctl is-active --quiet pbs-backup-manual.service; do
-                            sleep 2
-                        done
-                        # Service finished, kill the journal follow
-                        pkill -P $$ journalctl 2>/dev/null
-                    ) &
-                    MONITOR_PID=$!
-
-                    # Follow logs in foreground from the start (will be killed by monitor when backup completes)
-                    journalctl -u pbs-backup-manual.service -f --since "2 seconds ago" || true
-
-                    # Wait for monitor to finish
-                    wait $MONITOR_PID 2>/dev/null
-
-                    # Clear any leftover output
-                    echo
-                    echo "════════════════════════════════════════════════════════════"
-
-                    # Check final status
-                    if systemctl status pbs-backup-manual.service | grep -q "Active: failed"; then
-                        echo
-                        error "Backup failed!"
-                        echo
-                        info "Check full logs with:"
-                        echo "  sudo journalctl -u pbs-backup.service -n 50"
-                    else
-                        echo
-                        log "Backup completed successfully!"
-                        echo
-                        info "View backup snapshots with:"
-                        echo "  export PBS_REPOSITORY='$PBS_REPOSITORY'"
-                        echo "  export PBS_PASSWORD='***'"
-                        echo "  sudo -E proxmox-backup-client snapshot list"
-                    fi
-
+                    delete_target
                     exit 0
                     ;;
                 5)
-                    info "Modifying backup schedule and type..."
-                    reconfigure_backup_settings
+                    echo
+                    echo "Available targets:"
+                    list_targets | nl
+                    echo
+                    TARGET_NAME=$(prompt "Enter target name to backup" "")
+
+                    if ! validate_target_name "$TARGET_NAME"; then
+                        exit 1
+                    fi
+
+                    if ! target_exists "$TARGET_NAME"; then
+                        error "Target '$TARGET_NAME' does not exist"
+                        exit 1
+                    fi
+
+                    run_backup_for_target "$TARGET_NAME"
                     exit 0
                     ;;
                 6)
-                    info "Exiting without changes"
+                    echo
+                    echo "Available targets:"
+                    list_targets | nl
+                    echo
+                    TARGET_NAME=$(prompt "Enter target name to view" "")
+
+                    if validate_target_name "$TARGET_NAME"; then
+                        show_target_detail "$TARGET_NAME"
+                    fi
+                    exit 0
+                    ;;
+                7)
+                    info "Reinstalling PBS client..."
+                    install_pbs_client
+                    log "PBS client reinstalled successfully"
+                    exit 0
+                    ;;
+                8)
+                    info "Exiting"
                     exit 0
                     ;;
                 *)
@@ -1891,60 +1863,60 @@ main() {
                     ;;
             esac
         else
-            # PBS client installed but no config
-            info "No existing configuration found"
+            # PBS client installed but no targets configured
+            info "No backup targets configured"
             echo
-            echo "What would you like to do?"
-            echo "  1) Configure PBS client"
-            echo "  2) Reinstall and configure"
-            echo "  3) Exit"
-            ACTION=$(prompt "Select option [1/2/3]" "1")
+            info "Let's create your first backup target!"
+            echo
 
-            case "$ACTION" in
-                1)
-                    info "Proceeding with configuration..."
-                    # Continue to interactive_config below
-                    ;;
-                2)
-                    info "Reinstalling PBS client..."
-                    install_pbs_client
-                    # Continue to interactive_config below
-                    ;;
-                3)
-                    info "Exiting without changes"
-                    exit 0
-                    ;;
-                *)
-                    error "Invalid option"
-                    exit 1
-                    ;;
-            esac
+            TARGET_NAME=$(prompt "Enter name for first target (e.g., 'primary', 'local', 'offsite')" "default")
+
+            if ! validate_target_name "$TARGET_NAME"; then
+                error "Invalid target name"
+                exit 1
+            fi
+
+            if target_exists "$TARGET_NAME"; then
+                error "Target '$TARGET_NAME' already exists"
+                exit 1
+            fi
+
+            interactive_config_for_target "$TARGET_NAME"
+
+            echo
+            log "First target '$TARGET_NAME' created successfully!"
+            echo
+            info "You can add more targets by running this script again."
+            exit 0
         fi
     else
         # PBS client not installed
+        info "Installing Proxmox Backup Client..."
         install_pbs_client
+
+        echo
+        info "Let's create your first backup target!"
+        echo
+
+        TARGET_NAME=$(prompt "Enter name for first target (e.g., 'primary', 'local', 'offsite')" "default")
+
+        if ! validate_target_name "$TARGET_NAME"; then
+            error "Invalid target name"
+            exit 1
+        fi
+
+        interactive_config_for_target "$TARGET_NAME"
+
+        echo
+        log "First target '$TARGET_NAME' created successfully!"
+        echo
+        info "You can add more targets by running this script again."
+        exit 0
     fi
 
-    # Interactive configuration
-    interactive_config
-
-    # Create encryption key
-    create_encryption_key
-
-    # Test connection
-    if ! test_connection; then
-        error "Cannot proceed without successful connection to PBS"
-        exit 1
-    fi
-
-    # Create systemd service
-    create_systemd_service
-
-    # Offer to run backup now
-    run_backup_now
-
-    # Show summary
-    show_summary
+    # All paths should exit above, this should never be reached
+    error "Unexpected code path - please report this bug"
+    exit 1
 }
 
 # Run main function

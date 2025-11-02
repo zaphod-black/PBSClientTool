@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- **Multi-target backup support (v1.1.0 - 90% Complete)**
+- **Multi-target backup support (v1.1.0 - COMPLETE)**
   - Support for multiple backup destinations (different PBS servers for redundancy)
   - Named backup targets (e.g., "offsite", "local", "backup1")
   - Target management functions (COMPLETE):
@@ -39,11 +39,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - /etc/proxmox-backup-client/targets/TARGET.conf
     - /etc/proxmox-backup-client/backup-TARGET.sh
     - /etc/systemd/system/pbs-backup-TARGET.{service,timer}
-  - TODO (Main menu integration):
-    - Update main menu to show multi-target options
-    - Handle first-time setup for new installations
-    - Add "Run all targets" option
-    - Test migration from legacy to multi-target
+  - Main menu integration (COMPLETE):
+    - Multi-target management menu with 8 options
+    - First-time setup wizard for new installations
+    - Automatic target name prompt for first target
+    - Clean menu structure: List, Add, Edit, Delete, Run, View, Reinstall, Exit
+  - Ready for testing:
+    - All code paths implemented
+    - Syntax validated
+    - Needs functional testing
+    - Needs migration testing from legacy configs
 - Intelligent reconfiguration options when PBS client is already installed
   - Quick connection-only reconfiguration (server/credentials only)
   - Full reconfiguration of all settings
