@@ -1018,7 +1018,7 @@ run_backup_now() {
         MONITOR_PID=$!
 
         # Follow logs in foreground (will be killed by monitor when backup completes)
-        journalctl -fu pbs-backup.service 2>/dev/null || true
+        journalctl -fu pbs-backup-manual.service 2>/dev/null || true
 
         # Wait for monitor to finish
         wait $MONITOR_PID 2>/dev/null
@@ -1173,7 +1173,7 @@ main() {
                     MONITOR_PID=$!
 
                     # Follow logs in foreground (will be killed by monitor when backup completes)
-                    journalctl -fu pbs-backup.service 2>/dev/null || true
+                    journalctl -fu pbs-backup-manual.service 2>/dev/null || true
 
                     # Wait for monitor to finish
                     wait $MONITOR_PID 2>/dev/null
