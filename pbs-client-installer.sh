@@ -1979,14 +1979,41 @@ main() {
                 echo "  3) Edit existing target"
                 echo "  4) Delete target"
                 echo "  5) Run backup now (select target)"
-                echo "  6) View target details"
-                echo "  7) Reinstall PBS client"
-                echo "  8) Exit"
-                ACTION=$(prompt "Select option [1-8]" "8")
+                echo "  6) Reinstall PBS client"
+                echo "  7) Exit"
+                ACTION=$(prompt "Select option [1-7]" "7")
 
                 case "$ACTION" in
                     1)
                         show_targets_list
+                        echo
+                        echo "Options:"
+                        echo "  1) View target details"
+                        echo "  2) Back to main menu"
+                        SUBACTION=$(prompt "Select option [1/2]" "2")
+
+                        case "$SUBACTION" in
+                            1)
+                                echo
+                                echo "Available targets:"
+                                list_targets | nl
+                                echo
+                                USER_INPUT=$(prompt "Enter target number or name to view" "")
+
+                                if [ -n "$USER_INPUT" ]; then
+                                    TARGET_NAME=$(resolve_target_input "$USER_INPUT")
+                                    if [ -n "$TARGET_NAME" ] && validate_target_name "$TARGET_NAME"; then
+                                        show_target_detail "$TARGET_NAME"
+                                    fi
+                                fi
+                                ;;
+                            2)
+                                # Just continue to main menu
+                                ;;
+                            *)
+                                warn "Invalid option, returning to main menu"
+                                ;;
+                        esac
                         ;;
                     2)
                         add_target
@@ -2027,33 +2054,11 @@ main() {
                         run_backup_for_target "$TARGET_NAME"
                         ;;
                     6)
-                        echo
-                        echo "Available targets:"
-                        list_targets | nl
-                        echo
-                        USER_INPUT=$(prompt "Enter target number or name to view" "")
-
-                        if [ -z "$USER_INPUT" ]; then
-                            error "No target specified"
-                            continue
-                        fi
-
-                        TARGET_NAME=$(resolve_target_input "$USER_INPUT")
-                        if [ -z "$TARGET_NAME" ]; then
-                            error "Invalid target number: $USER_INPUT"
-                            continue
-                        fi
-
-                        if validate_target_name "$TARGET_NAME"; then
-                            show_target_detail "$TARGET_NAME"
-                        fi
-                        ;;
-                    7)
                         info "Reinstalling PBS client..."
                         install_pbs_client
                         log "PBS client reinstalled successfully"
                         ;;
-                    8)
+                    7)
                         info "Exiting"
                         exit 0
                         ;;

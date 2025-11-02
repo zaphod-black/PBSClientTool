@@ -120,6 +120,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Script version bumped to 1.1.0 for multi-target support
 
 ### Changed
+- **Improved menu flow for viewing target details**
+  - "View target details" moved from main menu option 6 to sub-menu under "List all backup targets"
+  - After listing targets, users can choose:
+    - View target details (select target to see comprehensive info)
+    - Back to main menu
+  - Main menu reduced from 8 options to 7 (cleaner, more focused)
+  - More intuitive workflow: list → view details → back to menu
 - **Target selection now accepts both numbers and names**
   - All target selection prompts now accept either:
     - Target number from the displayed list (e.g., "1")
