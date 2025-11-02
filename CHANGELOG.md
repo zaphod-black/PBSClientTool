@@ -119,6 +119,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Manual backups always include block device even on non-Sunday
 - Script version bumped to 1.1.0 for multi-target support
 
+### Changed
+- **Target selection now accepts both numbers and names**
+  - All target selection prompts now accept either:
+    - Target number from the displayed list (e.g., "1")
+    - Full target name (e.g., "default")
+  - Applies to: Edit, Delete, Run backup, View details
+  - Improves user experience - no need to remember target names
+  - More intuitive for users familiar with numbered menus
+
 ### Fixed
 - **Main menu now loops properly after actions**
   - Removed `exit 0` calls from all menu options except Exit

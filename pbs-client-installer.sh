@@ -104,6 +104,25 @@ get_target_config_path() {
     echo "$TARGETS_DIR/$name.conf"
 }
 
+# Convert user input (number or name) to target name
+resolve_target_input() {
+    local input="$1"
+
+    # If input is a number, get the Nth target
+    if [[ "$input" =~ ^[0-9]+$ ]]; then
+        local target_name=$(list_targets | sed -n "${input}p")
+        if [ -n "$target_name" ]; then
+            echo "$target_name"
+            return 0
+        fi
+        return 1
+    fi
+
+    # Otherwise treat as target name
+    echo "$input"
+    return 0
+}
+
 migrate_legacy_config() {
     # Check if old single-target config exists
     if [ -f "$CONFIG_DIR/config" ] && [ ! -d "$TARGETS_DIR" ]; then
@@ -230,7 +249,18 @@ edit_target() {
     list_targets | nl
     echo
 
-    TARGET_NAME=$(prompt "Enter target name to edit" "")
+    USER_INPUT=$(prompt "Enter target number or name" "")
+
+    if [ -z "$USER_INPUT" ]; then
+        error "No target specified"
+        return 1
+    fi
+
+    TARGET_NAME=$(resolve_target_input "$USER_INPUT")
+    if [ -z "$TARGET_NAME" ]; then
+        error "Invalid target number: $USER_INPUT"
+        return 1
+    fi
 
     if ! validate_target_name "$TARGET_NAME"; then
         return 1
@@ -283,7 +313,18 @@ delete_target() {
     list_targets | nl
     echo
 
-    TARGET_NAME=$(prompt "Enter target name to delete" "")
+    USER_INPUT=$(prompt "Enter target number or name to delete" "")
+
+    if [ -z "$USER_INPUT" ]; then
+        error "No target specified"
+        return 1
+    fi
+
+    TARGET_NAME=$(resolve_target_input "$USER_INPUT")
+    if [ -z "$TARGET_NAME" ]; then
+        error "Invalid target number: $USER_INPUT"
+        return 1
+    fi
 
     if ! validate_target_name "$TARGET_NAME"; then
         return 1
@@ -1961,7 +2002,18 @@ main() {
                         echo "Available targets:"
                         list_targets | nl
                         echo
-                        TARGET_NAME=$(prompt "Enter target name to backup" "")
+                        USER_INPUT=$(prompt "Enter target number or name to backup" "")
+
+                        if [ -z "$USER_INPUT" ]; then
+                            error "No target specified"
+                            continue
+                        fi
+
+                        TARGET_NAME=$(resolve_target_input "$USER_INPUT")
+                        if [ -z "$TARGET_NAME" ]; then
+                            error "Invalid target number: $USER_INPUT"
+                            continue
+                        fi
 
                         if ! validate_target_name "$TARGET_NAME"; then
                             continue
@@ -1979,7 +2031,18 @@ main() {
                         echo "Available targets:"
                         list_targets | nl
                         echo
-                        TARGET_NAME=$(prompt "Enter target name to view" "")
+                        USER_INPUT=$(prompt "Enter target number or name to view" "")
+
+                        if [ -z "$USER_INPUT" ]; then
+                            error "No target specified"
+                            continue
+                        fi
+
+                        TARGET_NAME=$(resolve_target_input "$USER_INPUT")
+                        if [ -z "$TARGET_NAME" ]; then
+                            error "Invalid target number: $USER_INPUT"
+                            continue
+                        fi
 
                         if validate_target_name "$TARGET_NAME"; then
                             show_target_detail "$TARGET_NAME"
