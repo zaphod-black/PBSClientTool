@@ -2138,6 +2138,12 @@ main() {
     # Migrate legacy configuration if needed
     migrate_legacy_config
 
+    # Check if script is installed as system command
+    SCRIPT_INSTALLED=false
+    if [ -f "$INSTALL_PATH" ]; then
+        SCRIPT_INSTALLED=true
+    fi
+
     # Check if PBS client is already installed
     if command -v proxmox-backup-client &> /dev/null; then
         warn "Proxmox Backup Client is already installed"
@@ -2161,9 +2167,16 @@ main() {
                 echo "  4) Delete target"
                 echo "  5) Run backup now (select target)"
                 echo "  6) Reinstall PBS client"
-                echo "  7) Install as system command"
-                echo "  8) Exit"
-                ACTION=$(prompt "Select option [1-8]" "8")
+
+                # Only show install option if not already installed
+                if [ "$SCRIPT_INSTALLED" = false ]; then
+                    echo "  7) Install as system command"
+                    echo "  8) Exit"
+                    ACTION=$(prompt "Select option [1-8]" "8")
+                else
+                    echo "  7) Exit"
+                    ACTION=$(prompt "Select option [1-7]" "7")
+                fi
 
                 case "$ACTION" in
                     1)
@@ -2241,11 +2254,26 @@ main() {
                         log "PBS client reinstalled successfully"
                         ;;
                     7)
-                        install_script
+                        # Option 7 is either "Install" or "Exit" depending on install status
+                        if [ "$SCRIPT_INSTALLED" = false ]; then
+                            install_script
+                            # Update status if installation succeeded
+                            if [ -f "$INSTALL_PATH" ]; then
+                                SCRIPT_INSTALLED=true
+                            fi
+                        else
+                            info "Exiting"
+                            exit 0
+                        fi
                         ;;
                     8)
-                        info "Exiting"
-                        exit 0
+                        # Option 8 only exists when not installed (it's Exit)
+                        if [ "$SCRIPT_INSTALLED" = false ]; then
+                            info "Exiting"
+                            exit 0
+                        else
+                            error "Invalid option"
+                        fi
                         ;;
                     *)
                         error "Invalid option"

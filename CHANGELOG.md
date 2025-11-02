@@ -142,6 +142,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Runs in subshell to avoid environment pollution
 
 ### Changed
+- **Smart menu adaptation based on installation status**
+  - Script detects if already installed as system command at startup
+  - Hides "Install as system command" menu option if already installed
+  - Menu adjusts from 8 options to 7 options when installed
+  - Exit option renumbers from 8 to 7 automatically
+  - Prompt range adjusts: [1-8] when not installed, [1-7] when installed
+  - Installation status tracked in SCRIPT_INSTALLED variable
+  - After installing from menu, option disappears immediately (updates status)
+  - Cleaner UX - no redundant install option when already installed
 - **Documentation reorganization**
   - README.md simplified from 750 lines to 243 lines
   - Removed redundant step-by-step walkthrough sections
