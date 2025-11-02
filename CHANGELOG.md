@@ -129,6 +129,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Runs in subshell to avoid environment pollution
 
 ### Changed
+- **Clearer installation flow when PBS client not installed**
+  - Shows what the script will do before proceeding
+  - Lists 3 steps: Install PBS client, Configure target, Set up automation
+  - Asks for confirmation before installation
+  - Allows user to cancel if they change their mind
+  - No menu options shown (install → configure → exit)
+  - Clear progress messages throughout installation
 - **Improved menu flow for viewing target details**
   - "View target details" moved from main menu option 6 to sub-menu under "List all backup targets"
   - After listing targets, users can choose:

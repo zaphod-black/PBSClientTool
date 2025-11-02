@@ -2149,11 +2149,27 @@ main() {
         fi
     else
         # PBS client not installed
+        info "Proxmox Backup Client is not installed on this system"
+        echo
+        echo "This script will:"
+        echo "  1. Install Proxmox Backup Client"
+        echo "  2. Configure your first backup target"
+        echo "  3. Set up automated backups"
+        echo
+
+        PROCEED=$(prompt "Do you want to proceed with installation? (yes/no)" "yes")
+
+        if [ "$PROCEED" != "yes" ]; then
+            info "Installation cancelled"
+            exit 0
+        fi
+
+        echo
         info "Installing Proxmox Backup Client..."
         install_pbs_client
 
         echo
-        info "Let's create your first backup target!"
+        info "Installation complete! Now let's create your first backup target!"
         echo
 
         TARGET_NAME=$(prompt "Enter name for first target (e.g., 'primary', 'local', 'offsite')" "default")
