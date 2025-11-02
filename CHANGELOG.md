@@ -139,6 +139,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Runs in subshell to avoid environment pollution
 
 ### Changed
+- **Documentation reorganization**
+  - README.md simplified from 750 lines to 243 lines
+  - Removed redundant step-by-step walkthrough sections
+  - Moved all troubleshooting content to TROUBLESHOOTING.md
+  - Focused README on quick start and essential usage
+  - New TROUBLESHOOTING.md covers:
+    - Connection issues and SSL certificate problems
+    - Permission errors with detailed PBS setup instructions
+    - Installation issues (Ubuntu libssl1.1, Arch libfuse3)
+    - Backup problems and configuration issues
+    - Common misconfigurations with examples
+  - Easier to find relevant information
+  - Better navigation and organization
 - **Clearer installation flow when PBS client not installed**
   - Shows what the script will do before proceeding
   - Lists 3 steps: Install PBS client, Configure target, Set up automation
