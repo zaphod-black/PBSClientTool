@@ -130,6 +130,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - install_script() function handles installation with overwrite confirmation
   - uninstall_script() function removes command but keeps configurations
   - Command-line argument parsing before main() execution
+  - **Menu option 7: "Install as system command"** - Available in main menu
+  - **Post-installation prompt** - Automatically asks if you want to install as system command after initial setup
+  - Detects if already installed (skips prompt if /usr/local/bin/PBSClientTool exists)
 - **Automatic connection testing at startup**
   - All configured targets are automatically tested when script starts
   - Quick authentication check (5 second timeout per target)

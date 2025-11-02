@@ -2161,8 +2161,9 @@ main() {
                 echo "  4) Delete target"
                 echo "  5) Run backup now (select target)"
                 echo "  6) Reinstall PBS client"
-                echo "  7) Exit"
-                ACTION=$(prompt "Select option [1-7]" "7")
+                echo "  7) Install as system command"
+                echo "  8) Exit"
+                ACTION=$(prompt "Select option [1-8]" "8")
 
                 case "$ACTION" in
                     1)
@@ -2240,6 +2241,9 @@ main() {
                         log "PBS client reinstalled successfully"
                         ;;
                     7)
+                        install_script
+                        ;;
+                    8)
                         info "Exiting"
                         exit 0
                         ;;
@@ -2271,6 +2275,22 @@ main() {
 
             echo
             log "First target '$TARGET_NAME' created successfully!"
+            echo
+
+            # Offer to install as system command
+            if [ ! -f "$INSTALL_PATH" ]; then
+                echo
+                info "Would you like to install PBSClientTool as a system command?"
+                echo "This will allow you to run 'sudo PBSClientTool' from anywhere."
+                echo
+                INSTALL_CHOICE=$(prompt "Install as system command? (yes/no)" "yes")
+
+                if [ "$INSTALL_CHOICE" = "yes" ]; then
+                    echo
+                    install_script
+                fi
+            fi
+
             echo
             info "You can add more targets by running this script again."
             exit 0
@@ -2311,6 +2331,22 @@ main() {
 
         echo
         log "First target '$TARGET_NAME' created successfully!"
+        echo
+
+        # Offer to install as system command
+        if [ ! -f "$INSTALL_PATH" ]; then
+            echo
+            info "Would you like to install PBSClientTool as a system command?"
+            echo "This will allow you to run 'sudo PBSClientTool' from anywhere."
+            echo
+            INSTALL_CHOICE=$(prompt "Install as system command? (yes/no)" "yes")
+
+            if [ "$INSTALL_CHOICE" = "yes" ]; then
+                echo
+                install_script
+            fi
+        fi
+
         echo
         info "You can add more targets by running this script again."
         exit 0
