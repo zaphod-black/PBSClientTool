@@ -1899,7 +1899,7 @@ run_backup_now() {
         # Show real-time progress
         echo "╔════════════════════════════════════════════════════════════╗"
         echo "║  Backup Progress (Live)                                    ║"
-        echo "║  Press Ctrl+C to exit (backup continues in background)    ║"
+        echo "║  Press Ctrl+C to exit (backup continues in background)     ║"
         echo "╚════════════════════════════════════════════════════════════╝"
         echo
 
@@ -2120,10 +2120,10 @@ show_version() {
 # Main script execution
 main() {
     echo
-    echo "╔════════════════════════════════════════╗"
-    echo "║  Proxmox Backup Client Installer      ║"
-    echo "║  Version: ${SCRIPT_VERSION}                     ║"
-    echo "╚════════════════════════════════════════╝"
+    echo "╔════════════════════════════════════════"
+    echo "║  Proxmox Backup Client Installer      
+    echo "║  Version: ${SCRIPT_VERSION}             "
+    echo "╚════════════════════════════════════════"
     echo
     
     # Create log file
