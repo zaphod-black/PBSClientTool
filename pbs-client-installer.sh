@@ -9,8 +9,9 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # Script configuration
-SCRIPT_VERSION="1.0.0"
+SCRIPT_VERSION="1.1.0"
 CONFIG_DIR="/etc/proxmox-backup-client"
+TARGETS_DIR="$CONFIG_DIR/targets"
 LOG_FILE="/var/log/pbs-client-installer.log"
 
 # Helper functions
@@ -53,6 +54,313 @@ prompt_password() {
     read -sp "$(echo -e ${BLUE}${prompt_text}${NC}: )" user_input
     echo >&2  # Output newline to stderr so it doesn't get captured
     echo "$user_input"
+}
+
+# Multi-target helper functions
+list_targets() {
+    if [ ! -d "$TARGETS_DIR" ]; then
+        return 1
+    fi
+
+    local targets=()
+    for config in "$TARGETS_DIR"/*.conf; do
+        if [ -f "$config" ]; then
+            targets+=("$(basename "$config" .conf)")
+        fi
+    done
+
+    if [ ${#targets[@]} -eq 0 ]; then
+        return 1
+    fi
+
+    printf '%s\n' "${targets[@]}"
+}
+
+validate_target_name() {
+    local name="$1"
+
+    # Check if name is empty
+    if [ -z "$name" ]; then
+        error "Target name cannot be empty"
+        return 1
+    fi
+
+    # Check if name contains only alphanumeric, dash, underscore
+    if ! [[ "$name" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+        error "Target name can only contain letters, numbers, dash, and underscore"
+        return 1
+    fi
+
+    return 0
+}
+
+target_exists() {
+    local name="$1"
+    [ -f "$TARGETS_DIR/$name.conf" ]
+}
+
+get_target_config_path() {
+    local name="$1"
+    echo "$TARGETS_DIR/$name.conf"
+}
+
+migrate_legacy_config() {
+    # Check if old single-target config exists
+    if [ -f "$CONFIG_DIR/config" ] && [ ! -d "$TARGETS_DIR" ]; then
+        log "Migrating legacy configuration to multi-target system..."
+
+        mkdir -p "$TARGETS_DIR"
+        mv "$CONFIG_DIR/config" "$TARGETS_DIR/default.conf"
+
+        # Rename old backup script if it exists
+        if [ -f "$CONFIG_DIR/backup.sh" ]; then
+            mv "$CONFIG_DIR/backup.sh" "$CONFIG_DIR/backup-default.sh"
+        fi
+
+        # Rename old services if they exist
+        if [ -f "/etc/systemd/system/pbs-backup.service" ]; then
+            systemctl stop pbs-backup.service pbs-backup.timer 2>/dev/null || true
+            systemctl disable pbs-backup.service pbs-backup.timer 2>/dev/null || true
+
+            mv /etc/systemd/system/pbs-backup.service /etc/systemd/system/pbs-backup-default.service
+            mv /etc/systemd/system/pbs-backup-manual.service /etc/systemd/system/pbs-backup-default-manual.service 2>/dev/null || true
+            mv /etc/systemd/system/pbs-backup.timer /etc/systemd/system/pbs-backup-default.timer
+
+            # Update service files to point to new backup script
+            sed -i 's|/etc/proxmox-backup-client/backup.sh|/etc/proxmox-backup-client/backup-default.sh|g' \
+                /etc/systemd/system/pbs-backup-default.service \
+                /etc/systemd/system/pbs-backup-default-manual.service 2>/dev/null || true
+
+            systemctl daemon-reload
+            systemctl enable pbs-backup-default.timer
+            systemctl start pbs-backup-default.timer
+
+            log "Legacy configuration migrated to 'default' target"
+        fi
+    fi
+}
+
+show_targets_list() {
+    echo
+    echo "════════════════════════════════════════"
+    echo "  Configured Backup Targets"
+    echo "════════════════════════════════════════"
+    echo
+
+    if ! list_targets >/dev/null 2>&1; then
+        warn "No backup targets configured"
+        return 1
+    fi
+
+    list_targets | while read -r target; do
+        local config_file="$(get_target_config_path "$target")"
+        if [ -f "$config_file" ]; then
+            source "$config_file"
+
+            echo "Target: $target"
+            echo "  Server: ${PBS_SERVER:-unknown}:${PBS_PORT:-8007}"
+            echo "  Datastore: ${PBS_DATASTORE:-unknown}"
+            echo "  Type: ${BACKUP_TYPE:-unknown}"
+            echo "  Schedule: ${TIMER_SCHEDULE:-unknown}"
+
+            # Check if timer is active
+            if systemctl is-enabled "pbs-backup-${target}.timer" &>/dev/null; then
+                if systemctl is-active "pbs-backup-${target}.timer" &>/dev/null; then
+                    echo "  Status: ✓ Active"
+                else
+                    echo "  Status: ✗ Inactive"
+                fi
+            else
+                echo "  Status: ✗ Disabled"
+            fi
+            echo
+        fi
+    done
+}
+
+add_target() {
+    echo
+    log "Adding new backup target..."
+    echo
+
+    # Get target name
+    while true; do
+        TARGET_NAME=$(prompt "Enter target name (e.g., 'offsite', 'local', 'backup1')" "")
+
+        if ! validate_target_name "$TARGET_NAME"; then
+            continue
+        fi
+
+        if target_exists "$TARGET_NAME"; then
+            error "Target '$TARGET_NAME' already exists"
+            continue
+        fi
+
+        break
+    done
+
+    # Run interactive config for this target
+    interactive_config_for_target "$TARGET_NAME"
+}
+
+edit_target() {
+    echo
+    if ! list_targets >/dev/null 2>&1; then
+        error "No targets configured"
+        return 1
+    fi
+
+    echo "Available targets:"
+    list_targets | nl
+    echo
+
+    TARGET_NAME=$(prompt "Enter target name to edit" "")
+
+    if ! validate_target_name "$TARGET_NAME"; then
+        return 1
+    fi
+
+    if ! target_exists "$TARGET_NAME"; then
+        error "Target '$TARGET_NAME' does not exist"
+        return 1
+    fi
+
+    log "Editing target: $TARGET_NAME"
+    echo
+    echo "What would you like to edit?"
+    echo "  1) Connection only (server/credentials)"
+    echo "  2) Backup settings (type/schedule/retention)"
+    echo "  3) Full reconfiguration"
+    echo "  4) Cancel"
+
+    local EDIT_CHOICE=$(prompt "Select option [1/2/3/4]" "1")
+
+    case "$EDIT_CHOICE" in
+        1)
+            reconfigure_connection_for_target "$TARGET_NAME"
+            ;;
+        2)
+            reconfigure_backup_settings_for_target "$TARGET_NAME"
+            ;;
+        3)
+            interactive_config_for_target "$TARGET_NAME"
+            ;;
+        4)
+            info "Cancelled"
+            return 0
+            ;;
+        *)
+            error "Invalid option"
+            return 1
+            ;;
+    esac
+}
+
+delete_target() {
+    echo
+    if ! list_targets >/dev/null 2>&1; then
+        error "No targets configured"
+        return 1
+    fi
+
+    echo "Available targets:"
+    list_targets | nl
+    echo
+
+    TARGET_NAME=$(prompt "Enter target name to delete" "")
+
+    if ! validate_target_name "$TARGET_NAME"; then
+        return 1
+    fi
+
+    if ! target_exists "$TARGET_NAME"; then
+        error "Target '$TARGET_NAME' does not exist"
+        return 1
+    fi
+
+    warn "This will delete target '$TARGET_NAME' and stop all associated backups"
+    local CONFIRM=$(prompt "Are you sure? Type 'yes' to confirm" "no")
+
+    if [ "$CONFIRM" != "yes" ]; then
+        info "Cancelled"
+        return 0
+    fi
+
+    log "Deleting target: $TARGET_NAME"
+
+    # Stop and disable services
+    systemctl stop "pbs-backup-${TARGET_NAME}.service" "pbs-backup-${TARGET_NAME}.timer" 2>/dev/null || true
+    systemctl disable "pbs-backup-${TARGET_NAME}.service" "pbs-backup-${TARGET_NAME}.timer" 2>/dev/null || true
+
+    # Remove files
+    rm -f "/etc/systemd/system/pbs-backup-${TARGET_NAME}.service"
+    rm -f "/etc/systemd/system/pbs-backup-${TARGET_NAME}-manual.service"
+    rm -f "/etc/systemd/system/pbs-backup-${TARGET_NAME}.timer"
+    rm -f "$CONFIG_DIR/backup-${TARGET_NAME}.sh"
+    rm -f "$(get_target_config_path "$TARGET_NAME")"
+
+    systemctl daemon-reload
+
+    log "Target '$TARGET_NAME' deleted successfully"
+}
+
+show_target_detail() {
+    local target="$1"
+
+    if ! target_exists "$target"; then
+        error "Target '$target' does not exist"
+        return 1
+    fi
+
+    local config_file="$(get_target_config_path "$target")"
+    source "$config_file"
+
+    echo
+    echo "════════════════════════════════════════"
+    echo "  Target: $target"
+    echo "════════════════════════════════════════"
+    echo
+    echo "Connection:"
+    echo "  Server: ${PBS_SERVER}:${PBS_PORT}"
+    echo "  Datastore: ${PBS_DATASTORE}"
+    echo "  Repository: ${PBS_REPOSITORY}"
+    echo
+    echo "Backup Configuration:"
+    echo "  Type: ${BACKUP_TYPE}"
+
+    if [[ "$BACKUP_TYPE" == "files" ]] || [[ "$BACKUP_TYPE" == "both" ]]; then
+        echo "  Paths: ${BACKUP_PATHS}"
+        echo "  Exclusions: ${EXCLUDE_PATTERNS}"
+    fi
+
+    if [[ "$BACKUP_TYPE" == "block" ]] || [[ "$BACKUP_TYPE" == "both" ]]; then
+        echo "  Block Device: ${BLOCK_DEVICE}"
+    fi
+
+    echo
+    echo "Schedule:"
+    if [[ "$BACKUP_TYPE" == "both" ]]; then
+        echo "  Files: ${TIMER_SCHEDULE} (${TIMER_ONCALENDAR})"
+        echo "  Block: Weekly on Sunday"
+    else
+        echo "  ${TIMER_SCHEDULE} (${TIMER_ONCALENDAR})"
+    fi
+
+    echo
+    echo "Retention:"
+    echo "  Last: ${KEEP_LAST}"
+    echo "  Daily: ${KEEP_DAILY}"
+    echo "  Weekly: ${KEEP_WEEKLY}"
+    echo "  Monthly: ${KEEP_MONTHLY}"
+    echo
+
+    # Show timer status
+    if systemctl is-enabled "pbs-backup-${target}.timer" &>/dev/null; then
+        echo "Next scheduled backup:"
+        systemctl list-timers "pbs-backup-${target}.timer" --no-pager 2>/dev/null || true
+    else
+        warn "Timer not enabled for this target"
+    fi
 }
 
 # Check if running as root

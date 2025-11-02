@@ -8,6 +8,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Multi-target backup support (IN PROGRESS - v1.1.0)**
+  - Support for multiple backup destinations (different PBS servers for redundancy)
+  - Named backup targets (e.g., "offsite", "local", "backup1")
+  - Target management functions:
+    - List all configured targets with status
+    - Add new backup targets
+    - Edit existing targets (connection, settings, or full reconfig)
+    - Delete targets with confirmation
+    - View detailed target information
+  - Automatic migration from legacy single-target configuration to "default" target
+  - Independent systemd services per target (pbs-backup-TARGET.service)
+  - Configuration stored in /etc/proxmox-backup-client/targets/TARGET.conf
+  - Schedule coordination options (planned):
+    - All targets run at same time
+    - Alternating schedule across targets
+    - Individual schedules per target
 - Intelligent reconfiguration options when PBS client is already installed
   - Quick connection-only reconfiguration (server/credentials only)
   - Full reconfiguration of all settings
@@ -52,6 +68,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Default realm changed from "pbs" to "pam"** (more common for root authentication)
 - **Default encryption setting changed from "yes" to "no"** (user can opt-in if needed)
 - Main menu now includes "Run backup now" option for immediate backup testing
+- Main menu now includes "Modify backup schedule/type" option (option 5)
+- Repository renamed from PBSClientInstaller to PBSClientTool
+- **Manual backups now force full backup (files + block device) regardless of day**
+  - Created separate pbs-backup-manual.service for manual runs
+  - Scheduled backups still follow daily/weekly pattern
+  - Manual backups always include block device even on non-Sunday
+- Script version bumped to 1.1.0 for multi-target support
 
 ### Fixed
 - **CRITICAL**: SSL fingerprint prompt no longer causes authentication timeout
@@ -71,6 +94,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Shows actual PBS client error messages when authentication fails
 - Authentication test now uses correct `login` command instead of non-existent `status` command
 - Connection test no longer times out due to using wrong PBS client commands
+- **Backup progress logs now display properly during manual backup runs**
+  - Fixed journalctl following wrong service (was following pbs-backup.service instead of pbs-backup-manual.service)
+  - Removed stderr suppression (2>/dev/null) that was hiding output
+  - Added --since flag to capture logs from service start, not just new entries
+  - Now shows verbose progress: "processed 65.6 GiB in 18m, uploaded 64.4 GiB"
+- Backup logs now close automatically when backup completes (no more blank screen)
 
 ## [1.0.0] - 2025-11-01
 
