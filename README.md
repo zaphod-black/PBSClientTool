@@ -1,4 +1,4 @@
-# PBSClientInstaller
+# PBSClientTool
 
 Interactive bash script that automatically installs and configures Proxmox Backup Client on Ubuntu, Debian, and Arch Linux systems.
 
@@ -78,8 +78,8 @@ Have these details ready before running the installer:
 ### Clone the repository
 
 ```bash
-git clone https://github.com/zaphod-black/PBSClientInstaller
-cd PBSClientInstaller
+git clone https://github.com/zaphod-black/PBSClientTool
+cd PBSClientTool
 chmod +x pbs-client-installer.sh
 ```
 
