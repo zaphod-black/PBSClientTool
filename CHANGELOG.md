@@ -8,22 +8,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- **Multi-target backup support (IN PROGRESS - v1.1.0)**
+- **Multi-target backup support (v1.1.0 - 90% Complete)**
   - Support for multiple backup destinations (different PBS servers for redundancy)
   - Named backup targets (e.g., "offsite", "local", "backup1")
-  - Target management functions:
-    - List all configured targets with status
-    - Add new backup targets
-    - Edit existing targets (connection, settings, or full reconfig)
-    - Delete targets with confirmation
-    - View detailed target information
-  - Automatic migration from legacy single-target configuration to "default" target
-  - Independent systemd services per target (pbs-backup-TARGET.service)
-  - Configuration stored in /etc/proxmox-backup-client/targets/TARGET.conf
-  - Schedule coordination options (planned):
-    - All targets run at same time
-    - Alternating schedule across targets
-    - Individual schedules per target
+  - Target management functions (COMPLETE):
+    - `list_targets()` - List all configured target names
+    - `show_targets_list()` - Display all targets with server/datastore/status
+    - `show_target_detail()` - Show comprehensive target configuration
+    - `add_target()` - Interactive target creation wizard
+    - `edit_target()` - Edit connection, settings, or full reconfig
+    - `delete_target()` - Remove target with confirmation and cleanup
+    - `validate_target_name()` - Enforce naming rules (alphanumeric, dash, underscore)
+  - Per-target wrapper functions (COMPLETE):
+    - `interactive_config_for_target()` - Configure specific target
+    - `reconfigure_connection_for_target()` - Update connection only
+    - `reconfigure_backup_settings_for_target()` - Update backup settings only
+    - `run_backup_for_target()` - Execute backup with live progress monitoring
+  - Systemd service creation (COMPLETE):
+    - `create_systemd_service_for_target()` - Generate all services for named target
+    - Creates pbs-backup-TARGET.service (scheduled)
+    - Creates pbs-backup-TARGET-manual.service (manual/full)
+    - Creates pbs-backup-TARGET.timer (scheduler)
+    - Generates target-specific backup scripts with embedded target name
+  - Automatic migration (COMPLETE):
+    - `migrate_legacy_config()` - Auto-migrate single-target to "default" target
+    - Renames services: pbs-backup → pbs-backup-default
+    - Preserves existing schedules and backups
+    - Zero downtime migration
+  - Configuration storage (COMPLETE):
+    - /etc/proxmox-backup-client/targets/TARGET.conf
+    - /etc/proxmox-backup-client/backup-TARGET.sh
+    - /etc/systemd/system/pbs-backup-TARGET.{service,timer}
+  - TODO (Main menu integration):
+    - Update main menu to show multi-target options
+    - Handle first-time setup for new installations
+    - Add "Run all targets" option
+    - Test migration from legacy to multi-target
 - Intelligent reconfiguration options when PBS client is already installed
   - Quick connection-only reconfiguration (server/credentials only)
   - Full reconfiguration of all settings

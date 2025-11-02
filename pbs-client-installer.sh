@@ -801,6 +801,126 @@ reconfigure_backup_settings() {
     systemctl list-timers pbs-backup.timer --no-pager || true
 }
 
+# Per-target wrapper functions
+interactive_config_for_target() {
+    local target_name="$1"
+    TARGET_NAME="$target_name"
+
+    log "Configuring backup target: $target_name"
+
+    # Run standard interactive config
+    interactive_config
+
+    # Create systemd service for this target
+    create_systemd_service_for_target "$target_name"
+
+    # Test connection
+    if ! test_connection; then
+        error "Connection test failed"
+        return 1
+    fi
+
+    log "Target '$target_name' configured successfully!"
+}
+
+reconfigure_connection_for_target() {
+    local target_name="$1"
+    TARGET_NAME="$target_name"
+
+    # Load existing config
+    if [ ! -f "$(get_target_config_path "$target_name")" ]; then
+        error "Target '$target_name' not found"
+        return 1
+    fi
+
+    source "$(get_target_config_path "$target_name")"
+
+    # Run standard reconfigure_connection
+    reconfigure_connection
+
+    # Update systemd service
+    create_systemd_service_for_target "$target_name"
+
+    # Restart timer
+    systemctl daemon-reload
+    systemctl restart "pbs-backup-${target_name}.timer"
+
+    log "Connection reconfigured for target '$target_name'"
+}
+
+reconfigure_backup_settings_for_target() {
+    local target_name="$1"
+    TARGET_NAME="$target_name"
+
+    # Load existing config
+    if [ ! -f "$(get_target_config_path "$target_name")" ]; then
+        error "Target '$target_name' not found"
+        return 1
+    fi
+
+    source "$(get_target_config_path "$target_name")"
+
+    # Run standard reconfigure_backup_settings
+    reconfigure_backup_settings
+}
+
+run_backup_for_target() {
+    local target_name="$1"
+
+    if ! target_exists "$target_name"; then
+        error "Target '$target_name' does not exist"
+        return 1
+    fi
+
+    info "Running FULL backup for target: $target_name"
+    echo
+
+    # Show real-time progress
+    echo "╔════════════════════════════════════════════════════════════╗"
+    echo "║  Backup Progress (Live) - Target: $target_name"
+    echo "║  Press Ctrl+C to exit (backup continues in background)    ║"
+    echo "╚════════════════════════════════════════════════════════════╝"
+    echo
+
+    # Start the manual backup (forces full backup)
+    systemctl start "pbs-backup-${target_name}-manual.service" &
+
+    # Wait a brief moment for service to register
+    sleep 0.5
+
+    # Monitor backup in background and kill journalctl when done
+    (
+        while systemctl is-active --quiet "pbs-backup-${target_name}-manual.service"; do
+            sleep 2
+        done
+        # Service finished, kill the journal follow
+        pkill -P $$ journalctl 2>/dev/null
+    ) &
+    MONITOR_PID=$!
+
+    # Follow logs in foreground from the start
+    journalctl -u "pbs-backup-${target_name}-manual.service" -f --since "2 seconds ago" || true
+
+    # Wait for monitor to finish
+    wait $MONITOR_PID 2>/dev/null
+
+    # Clear any leftover output
+    echo
+    echo "════════════════════════════════════════════════════════════"
+
+    # Check final status
+    if systemctl status "pbs-backup-${target_name}-manual.service" | grep -q "Active: failed"; then
+        echo
+        error "Backup failed!"
+        echo
+        info "Check full logs with:"
+        echo "  sudo journalctl -u pbs-backup-${target_name}-manual.service -n 50"
+    else
+        echo
+        log "Backup completed successfully!"
+    fi
+}
+
 # Interactive configuration
 interactive_config() {
     log "Starting interactive configuration..."
@@ -1293,6 +1413,244 @@ EOF
     systemctl status pbs-backup.timer --no-pager || true
 }
 
+# Create systemd service for a named target
+create_systemd_service_for_target() {
+    local target_name="$1"
+
+    log "Creating systemd service and timer for target: $target_name"
+
+    # Create targets directory
+    mkdir -p "$TARGETS_DIR"
+
+    # Strip any trailing newlines from password (defensive fix)
+    PBS_PASSWORD_CLEAN=$(echo -n "$PBS_PASSWORD" | tr -d '\n\r')
+
+    # Save configuration for this target
+    cat > "$(get_target_config_path "$target_name")" <<EOF
+# PBS Client Configuration - Target: $target_name
+PBS_SERVER="${PBS_SERVER}"
+PBS_PORT="${PBS_PORT}"
+PBS_DATASTORE="${PBS_DATASTORE}"
+PBS_REPOSITORY="${PBS_REPOSITORY}"
+PBS_PASSWORD="${PBS_PASSWORD_CLEAN}"
+BACKUP_TYPE="${BACKUP_TYPE}"
+BACKUP_PATHS="${BACKUP_PATHS}"
+EXCLUDE_PATTERNS="${EXCLUDE_PATTERNS}"
+BLOCK_DEVICE="${BLOCK_DEVICE}"
+TIMER_SCHEDULE="${TIMER_SCHEDULE}"
+TIMER_ONCALENDAR="${TIMER_ONCALENDAR}"
+KEEP_LAST=${KEEP_LAST}
+KEEP_DAILY=${KEEP_DAILY}
+KEEP_WEEKLY=${KEEP_WEEKLY}
+KEEP_MONTHLY=${KEEP_MONTHLY}
+EOF
+
+    chmod 600 "$(get_target_config_path "$target_name")"
+
+    # Create backup script for this target
+    cat > "$CONFIG_DIR/backup-${target_name}.sh" <<EOFSCRIPT
+#!/bin/bash
+set -e
+
+# Check if forcing full backup (for manual runs)
+FORCE_FULL="\${1:-no}"
+
+# Load configuration for target: $target_name
+source $(get_target_config_path "$target_name")
+
+# Export for PBS client
+export PBS_REPOSITORY
+export PBS_PASSWORD
+
+HOSTNAME=\$(hostname)
+BACKUP_SUCCESS=true
+
+log() {
+    echo "[\$(date +'%Y-%m-%d %H:%M:%S')] \$1"
+}
+
+# Function to create file-level backup
+backup_files() {
+    log "Starting file-level backup (.pxar) for target: $target_name"
+
+    BACKUP_CMD="proxmox-backup-client backup"
+
+    # Add each path as separate archive
+    for path in \$BACKUP_PATHS; do
+        # Sanitize path for archive name
+        archive_name=\$(echo "\$path" | sed 's/^\///' | sed 's/\//-/g')
+        [ -z "\$archive_name" ] && archive_name="root"
+
+        BACKUP_CMD="\$BACKUP_CMD \${archive_name}.pxar:\${path}"
+
+        # Add --include-dev for mount points
+        if mountpoint -q "\$path" 2>/dev/null; then
+            BACKUP_CMD="\$BACKUP_CMD --include-dev \${path}"
+        fi
+    done
+
+    # Add exclusions
+    for pattern in \$EXCLUDE_PATTERNS; do
+        BACKUP_CMD="\$BACKUP_CMD --exclude=\${pattern}"
+    done
+
+    # Add other options
+    BACKUP_CMD="\$BACKUP_CMD --skip-lost-and-found --change-detection-mode=metadata"
+
+    # Execute backup
+    if eval \$BACKUP_CMD; then
+        log "File-level backup completed successfully"
+        return 0
+    else
+        log "File-level backup FAILED" >&2
+        return 1
+    fi
+}
+
+# Function to create block device backup
+backup_block_device() {
+    log "Starting block device backup (.img) for target: $target_name"
+
+    if [ -z "\$BLOCK_DEVICE" ]; then
+        log "ERROR: BLOCK_DEVICE not configured" >&2
+        return 1
+    fi
+
+    if [ ! -b "\$BLOCK_DEVICE" ]; then
+        log "ERROR: \$BLOCK_DEVICE is not a block device" >&2
+        return 1
+    fi
+
+    # Get device size
+    DEVICE_SIZE=\$(blockdev --getsize64 "\$BLOCK_DEVICE" 2>/dev/null || echo "0")
+    DEVICE_SIZE_GB=\$((DEVICE_SIZE / 1024 / 1024 / 1024))
+
+    log "Backing up device: \$BLOCK_DEVICE (\${DEVICE_SIZE_GB}GB)"
+    log "This may take a while..."
+
+    # Sanitize device name for archive
+    DEVICE_NAME=\$(basename "\$BLOCK_DEVICE")
+
+    # Create block device backup
+    if proxmox-backup-client backup "\${DEVICE_NAME}.img:\${BLOCK_DEVICE}"; then
+        log "Block device backup completed successfully"
+        return 0
+    else
+        log "Block device backup FAILED" >&2
+        return 1
+    fi
+}
+
+# Main backup execution
+log "Starting backup for \${HOSTNAME} - Target: $target_name"
+log "Backup type: \${BACKUP_TYPE}"
+
+case "\$BACKUP_TYPE" in
+    files)
+        backup_files || BACKUP_SUCCESS=false
+        ;;
+    block)
+        backup_block_device || BACKUP_SUCCESS=false
+        ;;
+    both)
+        # Do file backup first (faster, more frequent)
+        backup_files || BACKUP_SUCCESS=false
+
+        # Do block device backup on Sunday OR if manually forced
+        if [ "\$FORCE_FULL" = "yes" ]; then
+            log "Manual full backup - including block device"
+            backup_block_device || BACKUP_SUCCESS=false
+        elif [ "\$(date +%u)" -eq 7 ]; then
+            log "Weekly block device backup day (Sunday)"
+            backup_block_device || BACKUP_SUCCESS=false
+        else
+            log "Skipping block device backup (runs weekly on Sunday, or use 'Run backup now' for immediate full backup)"
+        fi
+        ;;
+    *)
+        log "ERROR: Invalid BACKUP_TYPE: \${BACKUP_TYPE}" >&2
+        exit 1
+        ;;
+esac
+
+# Prune old backups
+if [ "\$BACKUP_SUCCESS" = true ]; then
+    log "Pruning old backups..."
+    proxmox-backup-client prune "host/\${HOSTNAME}" \\
+        --keep-last \$KEEP_LAST \\
+        --keep-daily \$KEEP_DAILY \\
+        --keep-weekly \$KEEP_WEEKLY \\
+        --keep-monthly \$KEEP_MONTHLY
+
+    log "Backup and prune completed successfully"
+else
+    log "Backup FAILED" >&2
+    exit 1
+fi
+EOFSCRIPT
+
+    chmod 700 "$CONFIG_DIR/backup-${target_name}.sh"
+
+    # Create systemd service file (for scheduled backups)
+    cat > "/etc/systemd/system/pbs-backup-${target_name}.service" <<EOF
+[Unit]
+Description=Proxmox Backup Client Backup - Target: $target_name
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=$CONFIG_DIR/backup-${target_name}.sh
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=pbs-backup
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+    # Create systemd service file for manual full backups
+    cat > "/etc/systemd/system/pbs-backup-${target_name}-manual.service" <<EOF
+[Unit]
+Description=Proxmox Backup Client Manual Full Backup - Target: $target_name
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=$CONFIG_DIR/backup-${target_name}.sh yes
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=pbs-backup
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+    # Create systemd timer file
+    cat > "/etc/systemd/system/pbs-backup-${target_name}.timer" <<EOF
+[Unit]
+Description=Proxmox Backup Client Backup Timer - Target: $target_name
+Requires=pbs-backup-${target_name}.service
+
+[Timer]
+OnCalendar=${TIMER_ONCALENDAR}
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+EOF
+
+    # Reload systemd and enable timer
+    systemctl daemon-reload
+    systemctl enable "pbs-backup-${target_name}.timer"
+    systemctl start "pbs-backup-${target_name}.timer"
+
+    log "Systemd service and timer created successfully for target: $target_name"
+    info "Timer status:"
+    systemctl status "pbs-backup-${target_name}.timer" --no-pager -l || true
+}
+
 # Run backup immediately
 run_backup_now() {
     echo
@@ -1415,22 +1773,31 @@ main() {
     # Detect distribution
     detect_distro
 
+    # Migrate legacy configuration if needed
+    migrate_legacy_config
+
     # Check if PBS client is already installed
     if command -v proxmox-backup-client &> /dev/null; then
         warn "Proxmox Backup Client is already installed"
 
-        # Check if configuration exists
-        if [ -f "$CONFIG_DIR/config" ]; then
-            info "Existing configuration detected"
+        # Check if any targets exist
+        if list_targets >/dev/null 2>&1; then
+            show_targets_list
+            echo
+            echo "════════════════════════════════════════"
+            echo "  Multi-Target Backup Management"
+            echo "════════════════════════════════════════"
             echo
             echo "What would you like to do?"
-            echo "  1) Reconfigure connection only (server/credentials)"
-            echo "  2) Full reconfiguration (all settings)"
-            echo "  3) Reinstall PBS client and reconfigure"
-            echo "  4) Run backup now"
-            echo "  5) Modify backup schedule/type"
-            echo "  6) Exit"
-            ACTION=$(prompt "Select option [1/2/3/4/5/6]" "1")
+            echo "  1) List all backup targets"
+            echo "  2) Add new backup target"
+            echo "  3) Edit existing target"
+            echo "  4) Delete target"
+            echo "  5) Run backup now (select target)"
+            echo "  6) View target details"
+            echo "  7) Reinstall PBS client"
+            echo "  8) Exit"
+            ACTION=$(prompt "Select option [1-8]" "1")
 
             case "$ACTION" in
                 1)
