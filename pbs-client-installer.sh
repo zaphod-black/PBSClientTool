@@ -872,52 +872,67 @@ run_backup_for_target() {
         return 1
     fi
 
-    info "Running FULL backup for target: $target_name"
+    # Load target config to check backup type
+    local config_file="$(get_target_config_path "$target_name")"
+    source "$config_file"
+
+    # If hybrid mode, ask what to backup
+    local BACKUP_MODE="yes"  # Default: full backup
+    if [[ "$BACKUP_TYPE" == "both" ]]; then
+        echo
+        info "This target is configured for hybrid backups (files + block device)"
+        echo
+        echo "What would you like to backup?"
+        echo "  1) Files only (fast ~2-3 minutes)"
+        echo "  2) Block device only (slow ~20-30 minutes, enables VM conversion)"
+        echo "  3) Both files and block device (full backup)"
+        BACKUP_CHOICE=$(prompt "Select option [1/2/3]" "3")
+
+        case "$BACKUP_CHOICE" in
+            1)
+                BACKUP_MODE="files"
+                info "Running files-only backup for target: $target_name"
+                ;;
+            2)
+                BACKUP_MODE="block"
+                info "Running block device backup for target: $target_name"
+                ;;
+            3)
+                BACKUP_MODE="yes"
+                info "Running FULL backup (files + block device) for target: $target_name"
+                ;;
+            *)
+                warn "Invalid choice, defaulting to full backup"
+                BACKUP_MODE="yes"
+                info "Running FULL backup for target: $target_name"
+                ;;
+        esac
+    else
+        info "Running backup for target: $target_name"
+    fi
+
     echo
 
     # Show real-time progress
     echo "╔════════════════════════════════════════════════════════════╗"
     echo "║  Backup Progress (Live) - Target: $target_name"
-    echo "║  Press Ctrl+C to exit (backup continues in background)    ║"
+    if [[ "$BACKUP_TYPE" == "both" ]]; then
+        echo "║  Mode: $BACKUP_MODE"
+    fi
+    echo "║  Press Ctrl+C to stop viewing (backup continues)          ║"
     echo "╚════════════════════════════════════════════════════════════╝"
     echo
 
-    # Start the manual backup (forces full backup)
-    systemctl start "pbs-backup-${target_name}-manual.service" &
-
-    # Wait a brief moment for service to register
-    sleep 0.5
-
-    # Monitor backup in background and kill journalctl when done
-    (
-        while systemctl is-active --quiet "pbs-backup-${target_name}-manual.service"; do
-            sleep 2
-        done
-        # Service finished, kill the journal follow
-        pkill -P $$ journalctl 2>/dev/null
-    ) &
-    MONITOR_PID=$!
-
-    # Follow logs in foreground from the start
-    journalctl -u "pbs-backup-${target_name}-manual.service" -f --since "2 seconds ago" || true
-
-    # Wait for monitor to finish
-    wait $MONITOR_PID 2>/dev/null
-
-    # Clear any leftover output
-    echo
-    echo "════════════════════════════════════════════════════════════"
-
-    # Check final status
-    if systemctl status "pbs-backup-${target_name}-manual.service" | grep -q "Active: failed"; then
+    # Run backup script directly with the chosen mode
+    if "$CONFIG_DIR/backup-${target_name}.sh" "$BACKUP_MODE"; then
+        echo
+        log "Backup completed successfully!"
+    else
         echo
         error "Backup failed!"
         echo
-        info "Check full logs with:"
-        echo "  sudo journalctl -u pbs-backup-${target_name}-manual.service -n 50"
-    else
-        echo
-        log "Backup completed successfully!"
+        info "Check logs above for details"
+        return 1
     fi
 }
 
@@ -1050,7 +1065,66 @@ interactive_config() {
             TIMER_SCHEDULE="custom"
             ;;
     esac
-    
+
+    # If hybrid mode, ask for block device schedule separately
+    if [[ "$BACKUP_TYPE" == "both" ]]; then
+        echo
+        info "Block Device Backup Schedule:"
+        echo "  Block device backups are slower (20-30 min) but enable VM conversion."
+        echo "  File backups will run on the schedule above."
+        echo
+        echo "  1) Weekly (recommended - every Sunday)"
+        echo "  2) Biweekly (every other Sunday)"
+        echo "  3) Monthly (1st of each month)"
+        echo "  4) Custom day of week"
+        echo "  5) Custom day of month"
+        BLOCK_SCHEDULE_TYPE=$(prompt "Select block device schedule [1/2/3/4/5]" "1")
+
+        case "$BLOCK_SCHEDULE_TYPE" in
+            1)
+                BLOCK_DEVICE_FREQUENCY="weekly"
+                BLOCK_DEVICE_DAY="7"  # Sunday
+                ;;
+            2)
+                BLOCK_DEVICE_FREQUENCY="biweekly"
+                BLOCK_DEVICE_DAY="7"  # Sunday
+                ;;
+            3)
+                BLOCK_DEVICE_FREQUENCY="monthly"
+                BLOCK_DEVICE_DAY="1"  # 1st of month
+                ;;
+            4)
+                BLOCK_BACKUP_DOW=$(prompt "Enter day of week for block device (Mon-Sun)" "Sun")
+                BLOCK_DEVICE_FREQUENCY="weekly"
+                # Convert day name to number (1=Mon, 7=Sun)
+                case "$BLOCK_BACKUP_DOW" in
+                    Mon|mon|MON|Monday|1) BLOCK_DEVICE_DAY="1" ;;
+                    Tue|tue|TUE|Tuesday|2) BLOCK_DEVICE_DAY="2" ;;
+                    Wed|wed|WED|Wednesday|3) BLOCK_DEVICE_DAY="3" ;;
+                    Thu|thu|THU|Thursday|4) BLOCK_DEVICE_DAY="4" ;;
+                    Fri|fri|FRI|Friday|5) BLOCK_DEVICE_DAY="5" ;;
+                    Sat|sat|SAT|Saturday|6) BLOCK_DEVICE_DAY="6" ;;
+                    Sun|sun|SUN|Sunday|7) BLOCK_DEVICE_DAY="7" ;;
+                    *) BLOCK_DEVICE_DAY="7" ;;
+                esac
+                ;;
+            5)
+                BLOCK_BACKUP_DOM=$(prompt "Enter day of month (1-31)" "1")
+                BLOCK_DEVICE_FREQUENCY="monthly"
+                BLOCK_DEVICE_DAY="$BLOCK_BACKUP_DOM"
+                ;;
+            *)
+                warn "Invalid choice, defaulting to weekly (Sunday)"
+                BLOCK_DEVICE_FREQUENCY="weekly"
+                BLOCK_DEVICE_DAY="7"
+                ;;
+        esac
+    else
+        # Not hybrid mode, set defaults (won't be used)
+        BLOCK_DEVICE_FREQUENCY="weekly"
+        BLOCK_DEVICE_DAY="7"
+    fi
+
     echo
     # Retention policy
     info "Retention Policy:"
@@ -1437,6 +1511,8 @@ BACKUP_TYPE="${BACKUP_TYPE}"
 BACKUP_PATHS="${BACKUP_PATHS}"
 EXCLUDE_PATTERNS="${EXCLUDE_PATTERNS}"
 BLOCK_DEVICE="${BLOCK_DEVICE}"
+BLOCK_DEVICE_FREQUENCY="${BLOCK_DEVICE_FREQUENCY}"
+BLOCK_DEVICE_DAY="${BLOCK_DEVICE_DAY}"
 TIMER_SCHEDULE="${TIMER_SCHEDULE}"
 TIMER_ONCALENDAR="${TIMER_ONCALENDAR}"
 KEEP_LAST=${KEEP_LAST}
@@ -1553,18 +1629,67 @@ case "\$BACKUP_TYPE" in
         backup_block_device || BACKUP_SUCCESS=false
         ;;
     both)
-        # Do file backup first (faster, more frequent)
-        backup_files || BACKUP_SUCCESS=false
+        # Determine what to backup
+        SHOULD_RUN_FILES=true
+        SHOULD_RUN_BLOCK=false
 
-        # Do block device backup on Sunday OR if manually forced
         if [ "\$FORCE_FULL" = "yes" ]; then
-            log "Manual full backup - including block device"
-            backup_block_device || BACKUP_SUCCESS=false
-        elif [ "\$(date +%u)" -eq 7 ]; then
-            log "Weekly block device backup day (Sunday)"
+            log "Manual full backup - running both files and block device"
+            SHOULD_RUN_FILES=true
+            SHOULD_RUN_BLOCK=true
+        elif [ "\$FORCE_FULL" = "files" ]; then
+            log "Manual files-only backup"
+            SHOULD_RUN_FILES=true
+            SHOULD_RUN_BLOCK=false
+        elif [ "\$FORCE_FULL" = "block" ]; then
+            log "Manual block-only backup"
+            SHOULD_RUN_FILES=false
+            SHOULD_RUN_BLOCK=true
+        else
+            # Scheduled backup - check if it's time based on frequency
+            CURRENT_DOW=\$(date +%u)  # 1=Mon, 7=Sun
+            CURRENT_DOM=\$(date +%d | sed 's/^0//')  # Remove leading zero
+
+            case "\$BLOCK_DEVICE_FREQUENCY" in
+                weekly)
+                    if [ "\$CURRENT_DOW" -eq "\$BLOCK_DEVICE_DAY" ]; then
+                        log "Weekly block device backup day (day \$BLOCK_DEVICE_DAY)"
+                        SHOULD_RUN_BLOCK=true
+                    fi
+                    ;;
+                biweekly)
+                    WEEK_OF_YEAR=\$(date +%V)
+                    if [ "\$CURRENT_DOW" -eq "\$BLOCK_DEVICE_DAY" ] && [ \$((WEEK_OF_YEAR % 2)) -eq 0 ]; then
+                        log "Biweekly block device backup day (even week, day \$BLOCK_DEVICE_DAY)"
+                        SHOULD_RUN_BLOCK=true
+                    fi
+                    ;;
+                monthly)
+                    if [ "\$CURRENT_DOM" -eq "\$BLOCK_DEVICE_DAY" ]; then
+                        log "Monthly block device backup day (\$BLOCK_DEVICE_DAY of month)"
+                        SHOULD_RUN_BLOCK=true
+                    fi
+                    ;;
+                *)
+                    log "Unknown BLOCK_DEVICE_FREQUENCY: \$BLOCK_DEVICE_FREQUENCY, defaulting to weekly Sunday"
+                    if [ "\$CURRENT_DOW" -eq 7 ]; then
+                        SHOULD_RUN_BLOCK=true
+                    fi
+                    ;;
+            esac
+        fi
+
+        # Execute backups based on decisions
+        if [ "\$SHOULD_RUN_FILES" = true ]; then
+            backup_files || BACKUP_SUCCESS=false
+        else
+            log "Skipping file backup (block-only mode)"
+        fi
+
+        if [ "\$SHOULD_RUN_BLOCK" = true ]; then
             backup_block_device || BACKUP_SUCCESS=false
         else
-            log "Skipping block device backup (runs weekly on Sunday, or use 'Run backup now' for immediate full backup)"
+            log "Skipping block device backup (next: \${BLOCK_DEVICE_FREQUENCY} on day \${BLOCK_DEVICE_DAY})"
         fi
         ;;
     *)

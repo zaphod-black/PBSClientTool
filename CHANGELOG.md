@@ -49,6 +49,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - Syntax validated
     - Needs functional testing
     - Needs migration testing from legacy configs
+- **Flexible block device scheduling in hybrid mode**
+  - Separate schedule configuration for block device backups vs file backups
+  - Block device schedule options:
+    - Weekly (specific day of week, default Sunday)
+    - Biweekly (every other week on specific day)
+    - Monthly (specific day of month)
+    - Custom day of week (1-7, Monday-Sunday)
+    - Custom day of month (1-31)
+  - File backups run on main schedule, block device on independent schedule
+  - Configuration stored in BLOCK_DEVICE_FREQUENCY and BLOCK_DEVICE_DAY variables
+- **Manual backup selection for hybrid mode**
+  - Interactive menu when running backup in hybrid mode
+  - Three options:
+    - Files only (fast ~2-3 minutes) - daily file archives
+    - Block device only (slow ~20-30 minutes) - full disk image for VM conversion
+    - Both files and block device (complete backup)
+  - Allows selective backup execution without changing configuration
+  - Backup script supports three FORCE_FULL values: "files", "block", "yes"
 - Intelligent reconfiguration options when PBS client is already installed
   - Quick connection-only reconfiguration (server/credentials only)
   - Full reconfiguration of all settings
