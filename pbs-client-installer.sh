@@ -784,6 +784,9 @@ EOF
 #!/bin/bash
 set -e
 
+# Check if forcing full backup (for manual runs)
+FORCE_FULL="${1:-no}"
+
 # Load configuration
 source /etc/proxmox-backup-client/config
 
@@ -884,13 +887,16 @@ case "$BACKUP_TYPE" in
     both)
         # Do file backup first (faster, more frequent)
         backup_files || BACKUP_SUCCESS=false
-        
-        # Only do block device backup on Sunday (weekly)
-        if [ "$(date +%u)" -eq 7 ]; then
+
+        # Do block device backup on Sunday OR if manually forced
+        if [ "$FORCE_FULL" = "yes" ]; then
+            log "Manual full backup - including block device"
+            backup_block_device || BACKUP_SUCCESS=false
+        elif [ "$(date +%u)" -eq 7 ]; then
             log "Weekly block device backup day (Sunday)"
             backup_block_device || BACKUP_SUCCESS=false
         else
-            log "Skipping block device backup (runs weekly on Sunday)"
+            log "Skipping block device backup (runs weekly on Sunday, or use 'Run backup now' for immediate full backup)"
         fi
         ;;
     *)
@@ -917,7 +923,7 @@ EOFSCRIPT
     
     chmod 700 "$CONFIG_DIR/backup.sh"
     
-    # Create systemd service file
+    # Create systemd service file (for scheduled backups)
     cat > /etc/systemd/system/pbs-backup.service <<EOF
 [Unit]
 Description=Proxmox Backup Client Backup
@@ -934,7 +940,25 @@ SyslogIdentifier=pbs-backup
 [Install]
 WantedBy=multi-user.target
 EOF
-    
+
+    # Create systemd service file for manual full backups
+    cat > /etc/systemd/system/pbs-backup-manual.service <<EOF
+[Unit]
+Description=Proxmox Backup Client Manual Full Backup
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=$CONFIG_DIR/backup.sh yes
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=pbs-backup
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
     # Create systemd timer file
     cat > /etc/systemd/system/pbs-backup.timer <<EOF
 [Unit]
@@ -967,11 +991,11 @@ run_backup_now() {
     RUN_NOW=$(prompt "Do you want to run a backup now? (yes/no)" "no")
 
     if [[ "$RUN_NOW" == "yes" ]]; then
-        log "Starting immediate backup..."
+        log "Starting immediate FULL backup (files + block device)..."
         echo
 
-        # Start the backup
-        systemctl start pbs-backup.service
+        # Start the manual backup (forces full backup)
+        systemctl start pbs-backup-manual.service
 
         # Wait a moment for service to start
         sleep 1
@@ -985,7 +1009,7 @@ run_backup_now() {
 
         # Monitor backup in background and kill journalctl when done
         (
-            while systemctl is-active --quiet pbs-backup.service; do
+            while systemctl is-active --quiet pbs-backup-manual.service; do
                 sleep 2
             done
             # Service finished, kill the journal follow
@@ -1004,7 +1028,7 @@ run_backup_now() {
         echo "════════════════════════════════════════════════════════════"
 
         # Check final status
-        if systemctl status pbs-backup.service | grep -q "Active: failed"; then
+        if systemctl status pbs-backup-manual.service | grep -q "Active: failed"; then
             echo
             error "Backup failed!"
         else
@@ -1122,11 +1146,11 @@ main() {
                     # Continue to interactive_config below
                     ;;
                 4)
-                    info "Running backup now..."
+                    info "Running FULL backup now (files + block device)..."
                     echo
 
-                    # Start the backup
-                    systemctl start pbs-backup.service
+                    # Start the manual backup (forces full backup)
+                    systemctl start pbs-backup-manual.service
 
                     # Wait a moment for service to start
                     sleep 1
@@ -1140,7 +1164,7 @@ main() {
 
                     # Monitor backup in background and kill journalctl when done
                     (
-                        while systemctl is-active --quiet pbs-backup.service; do
+                        while systemctl is-active --quiet pbs-backup-manual.service; do
                             sleep 2
                         done
                         # Service finished, kill the journal follow
@@ -1159,7 +1183,7 @@ main() {
                     echo "════════════════════════════════════════════════════════════"
 
                     # Check final status
-                    if systemctl status pbs-backup.service | grep -q "Active: failed"; then
+                    if systemctl status pbs-backup-manual.service | grep -q "Active: failed"; then
                         echo
                         error "Backup failed!"
                         echo
