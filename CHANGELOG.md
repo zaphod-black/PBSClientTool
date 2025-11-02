@@ -136,6 +136,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - More intuitive for users familiar with numbered menus
 
 ### Fixed
+- **CRITICAL: All input fields now trimmed to prevent whitespace issues**
+  - Added `| xargs` to all prompted variables (server, port, datastore, username, realm, token name, etc.)
+  - Prevents trailing/leading whitespace from breaking PBS_REPOSITORY string
+  - Fixes authentication failures caused by malformed repository strings
+  - Example: `"root@pam "` (with space) now becomes `"root@pam"` automatically
+  - Applied to both interactive_config_for_target() and reconfigure_connection_for_target()
 - **Main menu now loops properly after actions**
   - Removed `exit 0` calls from all menu options except Exit
   - Menu now continues after listing targets, running backups, or other actions

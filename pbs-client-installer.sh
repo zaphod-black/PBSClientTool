@@ -610,9 +610,9 @@ reconfigure_connection() {
     echo
 
     # PBS Server details
-    PBS_SERVER=$(prompt "Enter PBS server IP/hostname" "192.168.1.181")
-    PBS_PORT=$(prompt "Enter PBS server port" "8007")
-    PBS_DATASTORE=$(prompt "Enter datastore name" "backups")
+    PBS_SERVER=$(prompt "Enter PBS server IP/hostname" "192.168.1.181" | xargs)
+    PBS_PORT=$(prompt "Enter PBS server port" "8007" | xargs)
+    PBS_DATASTORE=$(prompt "Enter datastore name" "backups" | xargs)
 
     echo
     info "Authentication Method:"
@@ -621,15 +621,15 @@ reconfigure_connection() {
     AUTH_METHOD=$(prompt "Select authentication method [1/2]" "2")
 
     if [ "$AUTH_METHOD" = "1" ]; then
-        PBS_USERNAME=$(prompt "Enter username" "root")
-        PBS_REALM=$(prompt "Enter realm" "pam")
-        PBS_PASSWORD=$(prompt_password "Enter password")
+        PBS_USERNAME=$(prompt "Enter username" "root" | xargs)
+        PBS_REALM=$(prompt "Enter realm" "pam" | xargs)
+        PBS_PASSWORD=$(prompt_password "Enter password" | xargs)
         PBS_REPOSITORY="${PBS_USERNAME}@${PBS_REALM}@${PBS_SERVER}:${PBS_PORT}:${PBS_DATASTORE}"
     else
-        PBS_USERNAME=$(prompt "Enter username" "backup")
-        PBS_REALM=$(prompt "Enter realm" "pam")
-        PBS_TOKEN_NAME=$(prompt "Enter token name" "backup-token")
-        PBS_TOKEN_SECRET=$(prompt_password "Enter token secret")
+        PBS_USERNAME=$(prompt "Enter username" "backup" | xargs)
+        PBS_REALM=$(prompt "Enter realm" "pam" | xargs)
+        PBS_TOKEN_NAME=$(prompt "Enter token name" "backup-token" | xargs)
+        PBS_TOKEN_SECRET=$(prompt_password "Enter token secret" | xargs)
         PBS_REPOSITORY="${PBS_USERNAME}@${PBS_REALM}!${PBS_TOKEN_NAME}@${PBS_SERVER}:${PBS_PORT}:${PBS_DATASTORE}"
         PBS_PASSWORD="$PBS_TOKEN_SECRET"
     fi
@@ -1003,26 +1003,26 @@ interactive_config() {
     echo
 
     # PBS Server details
-    PBS_SERVER=$(prompt "Enter PBS server IP/hostname" "192.168.1.181")
-    PBS_PORT=$(prompt "Enter PBS server port" "8007")
-    PBS_DATASTORE=$(prompt "Enter datastore name" "backups")
-    
+    PBS_SERVER=$(prompt "Enter PBS server IP/hostname" "192.168.1.181" | xargs)
+    PBS_PORT=$(prompt "Enter PBS server port" "8007" | xargs)
+    PBS_DATASTORE=$(prompt "Enter datastore name" "backups" | xargs)
+
     echo
     info "Authentication Method:"
     echo "  1) Username + Password"
     echo "  2) API Token (recommended for automation)"
     AUTH_METHOD=$(prompt "Select authentication method [1/2]" "2")
-    
+
     if [ "$AUTH_METHOD" = "1" ]; then
-        PBS_USERNAME=$(prompt "Enter username" "root")
-        PBS_REALM=$(prompt "Enter realm" "pam")
-        PBS_PASSWORD=$(prompt_password "Enter password")
+        PBS_USERNAME=$(prompt "Enter username" "root" | xargs)
+        PBS_REALM=$(prompt "Enter realm" "pam" | xargs)
+        PBS_PASSWORD=$(prompt_password "Enter password" | xargs)
         PBS_REPOSITORY="${PBS_USERNAME}@${PBS_REALM}@${PBS_SERVER}:${PBS_PORT}:${PBS_DATASTORE}"
     else
-        PBS_USERNAME=$(prompt "Enter username" "backup")
-        PBS_REALM=$(prompt "Enter realm" "pam")
-        PBS_TOKEN_NAME=$(prompt "Enter token name" "backup-token")
-        PBS_TOKEN_SECRET=$(prompt_password "Enter token secret")
+        PBS_USERNAME=$(prompt "Enter username" "backup" | xargs)
+        PBS_REALM=$(prompt "Enter realm" "pam" | xargs)
+        PBS_TOKEN_NAME=$(prompt "Enter token name" "backup-token" | xargs)
+        PBS_TOKEN_SECRET=$(prompt_password "Enter token secret" | xargs)
         PBS_REPOSITORY="${PBS_USERNAME}@${PBS_REALM}!${PBS_TOKEN_NAME}@${PBS_SERVER}:${PBS_PORT}:${PBS_DATASTORE}"
         PBS_PASSWORD="$PBS_TOKEN_SECRET"
     fi
