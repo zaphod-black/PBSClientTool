@@ -168,7 +168,8 @@ show_targets_list() {
             echo "Target: $target"
 
             # Check if config seems incomplete
-            if [ -z "$PBS_SERVER" ] || [ -z "$PBS_DATASTORE" ]; then
+            if [ -z "$PBS_SERVER" ] || [ -z "$PBS_DATASTORE" ] || \
+               [ "$PBS_SERVER" = "unknown" ] || [ "$PBS_DATASTORE" = "unknown" ]; then
                 echo "  Status: ⚠ Incomplete configuration"
                 echo "  Action: Use option 3 (Edit target) to reconfigure"
             else
