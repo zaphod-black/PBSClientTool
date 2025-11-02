@@ -994,18 +994,18 @@ run_backup_now() {
         log "Starting immediate FULL backup (files + block device)..."
         echo
 
-        # Start the manual backup (forces full backup)
-        systemctl start pbs-backup-manual.service
-
-        # Wait a moment for service to start
-        sleep 1
-
         # Show real-time progress
         echo "╔════════════════════════════════════════════════════════════╗"
         echo "║  Backup Progress (Live)                                    ║"
         echo "║  Press Ctrl+C to exit (backup continues in background)    ║"
         echo "╚════════════════════════════════════════════════════════════╝"
         echo
+
+        # Start the manual backup (forces full backup)
+        systemctl start pbs-backup-manual.service &
+
+        # Wait a brief moment for service to register
+        sleep 0.5
 
         # Monitor backup in background and kill journalctl when done
         (
@@ -1017,8 +1017,9 @@ run_backup_now() {
         ) &
         MONITOR_PID=$!
 
-        # Follow logs in foreground (will be killed by monitor when backup completes)
-        journalctl -fu pbs-backup-manual.service 2>/dev/null || true
+        # Follow logs in foreground from the start (will be killed by monitor when backup completes)
+        # Use --since to catch logs from service start, and -n 100 to show recent context
+        journalctl -u pbs-backup-manual.service -f --since "5 seconds ago" -n 100 2>/dev/null || true
 
         # Wait for monitor to finish
         wait $MONITOR_PID 2>/dev/null
@@ -1149,18 +1150,18 @@ main() {
                     info "Running FULL backup now (files + block device)..."
                     echo
 
-                    # Start the manual backup (forces full backup)
-                    systemctl start pbs-backup-manual.service
-
-                    # Wait a moment for service to start
-                    sleep 1
-
                     # Show real-time progress
                     echo "╔════════════════════════════════════════════════════════════╗"
                     echo "║  Backup Progress (Live)                                    ║"
                     echo "║  Press Ctrl+C to exit (backup continues in background)    ║"
                     echo "╚════════════════════════════════════════════════════════════╝"
                     echo
+
+                    # Start the manual backup (forces full backup)
+                    systemctl start pbs-backup-manual.service &
+
+                    # Wait a brief moment for service to register
+                    sleep 0.5
 
                     # Monitor backup in background and kill journalctl when done
                     (
@@ -1172,8 +1173,9 @@ main() {
                     ) &
                     MONITOR_PID=$!
 
-                    # Follow logs in foreground (will be killed by monitor when backup completes)
-                    journalctl -fu pbs-backup-manual.service 2>/dev/null || true
+                    # Follow logs in foreground from the start (will be killed by monitor when backup completes)
+                    # Use --since to catch logs from service start, and -n 100 to show recent context
+                    journalctl -u pbs-backup-manual.service -f --since "5 seconds ago" -n 100 2>/dev/null || true
 
                     # Wait for monitor to finish
                     wait $MONITOR_PID 2>/dev/null
