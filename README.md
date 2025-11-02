@@ -4,6 +4,7 @@ Interactive bash script that automatically installs and configures Proxmox Backu
 
 ## Features
 
+- **Multi-target backup support** - Backup to multiple PBS servers for redundancy
 - **Auto-detects Linux distribution** (Ubuntu 20.04/22.04/24.04, Debian 10/11/12, Arch Linux)
 - **Installs correct PBS client version** for your system
 - **Interactive configuration** via console prompts
@@ -12,6 +13,57 @@ Interactive bash script that automatically installs and configures Proxmox Backu
 - **Configurable retention policies** (daily, weekly, monthly)
 - **Connection testing** before finalizing setup
 - **Immediate backup option** after installation
+- **System-wide installation** - Run from anywhere with `PBSClientTool` command
+
+## Installation
+
+### Quick Install
+
+```bash
+# Clone the repository
+git clone https://github.com/zaphod-black/PBSClientTool.git
+cd PBSClientTool
+
+# Install PBSClientTool to your system
+sudo ./pbs-client-installer.sh --install
+```
+
+After installation, you can run the tool from anywhere:
+
+```bash
+sudo PBSClientTool
+```
+
+### Manual Usage (Without Installing)
+
+You can also run the script directly without installing:
+
+```bash
+sudo ./pbs-client-installer.sh
+```
+
+### Command-Line Options
+
+```bash
+sudo PBSClientTool --help       # Show help message
+sudo PBSClientTool --version    # Show version
+sudo PBSClientTool --install    # Install to /usr/local/bin
+sudo PBSClientTool --uninstall  # Remove from system
+```
+
+### Uninstallation
+
+To remove the PBSClientTool command from your system:
+
+```bash
+sudo PBSClientTool --uninstall
+```
+
+**Note:** This only removes the command. Your backup targets and configurations are preserved. To completely remove all backups and configurations, use:
+
+```bash
+sudo ./uninstaller.sh
+```
 
 ## Prerequisites
 

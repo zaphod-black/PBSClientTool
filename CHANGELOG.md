@@ -120,6 +120,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Script version bumped to 1.1.0 for multi-target support
 
 ### Added
+- **System-wide installation support**
+  - New `--install` flag to install PBSClientTool to /usr/local/bin
+  - Run from anywhere with `sudo PBSClientTool` command
+  - No need to navigate to script directory
+  - Includes `--uninstall` to remove from system
+  - Added `--help` and `--version` flags for command-line usage
+  - Installation preserves original script (safe to update via git pull)
+  - install_script() function handles installation with overwrite confirmation
+  - uninstall_script() function removes command but keeps configurations
+  - Command-line argument parsing before main() execution
 - **Automatic connection testing at startup**
   - All configured targets are automatically tested when script starts
   - Quick authentication check (5 second timeout per target)

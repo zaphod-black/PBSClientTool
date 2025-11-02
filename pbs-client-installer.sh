@@ -10,6 +10,8 @@ NC='\033[0m' # No Color
 
 # Script configuration
 SCRIPT_VERSION="1.1.0"
+SCRIPT_NAME="PBSClientTool"
+INSTALL_PATH="/usr/local/bin/$SCRIPT_NAME"
 CONFIG_DIR="/etc/proxmox-backup-client"
 TARGETS_DIR="$CONFIG_DIR/targets"
 LOG_FILE="/var/log/pbs-client-installer.log"
@@ -1989,6 +1991,132 @@ show_summary() {
     log "Setup completed successfully!"
 }
 
+# Install script to system PATH
+install_script() {
+    check_root
+
+    echo
+    echo "╔════════════════════════════════════════╗"
+    echo "║  Install PBSClientTool                 ║"
+    echo "╚════════════════════════════════════════╝"
+    echo
+
+    # Get the absolute path of this script
+    SCRIPT_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
+
+    if [ -f "$INSTALL_PATH" ]; then
+        warn "PBSClientTool is already installed at $INSTALL_PATH"
+        OVERWRITE=$(prompt "Do you want to overwrite it? (yes/no)" "no")
+        if [ "$OVERWRITE" != "yes" ]; then
+            info "Installation cancelled"
+            return 0
+        fi
+    fi
+
+    log "Installing PBSClientTool to $INSTALL_PATH..."
+
+    # Copy script to /usr/local/bin/
+    cp "$SCRIPT_PATH" "$INSTALL_PATH"
+    chmod +x "$INSTALL_PATH"
+
+    log "Installation complete!"
+    echo
+    info "You can now run the tool from anywhere using:"
+    echo "  sudo $SCRIPT_NAME"
+    echo
+    info "Available commands:"
+    echo "  sudo $SCRIPT_NAME          - Run interactive menu"
+    echo "  sudo $SCRIPT_NAME --help   - Show help message"
+    echo "  sudo $SCRIPT_NAME --version - Show version"
+    echo
+}
+
+# Uninstall script from system PATH
+uninstall_script() {
+    check_root
+
+    echo
+    echo "╔════════════════════════════════════════╗"
+    echo "║  Uninstall PBSClientTool               ║"
+    echo "╚════════════════════════════════════════╝"
+    echo
+
+    if [ ! -f "$INSTALL_PATH" ]; then
+        error "PBSClientTool is not installed at $INSTALL_PATH"
+        return 1
+    fi
+
+    warn "This will remove the PBSClientTool command from your system"
+    warn "Your backup targets and configurations will NOT be removed"
+    echo
+    CONFIRM=$(prompt "Do you want to continue? (yes/no)" "no")
+
+    if [ "$CONFIRM" != "yes" ]; then
+        info "Uninstall cancelled"
+        return 0
+    fi
+
+    log "Removing $INSTALL_PATH..."
+    rm -f "$INSTALL_PATH"
+
+    log "Uninstall complete!"
+    echo
+    info "To completely remove all backup configurations, use the uninstaller:"
+    echo "  sudo ./uninstaller.sh"
+    echo
+}
+
+# Show help message
+show_help() {
+    cat << EOF
+
+Proxmox Backup Client Tool v${SCRIPT_VERSION}
+
+A tool for managing Proxmox Backup Server client installations and multi-target backups.
+
+USAGE:
+    sudo $SCRIPT_NAME [OPTIONS]
+
+OPTIONS:
+    --install       Install PBSClientTool to /usr/local/bin (makes it available system-wide)
+    --uninstall     Uninstall PBSClientTool from system
+    --help, -h      Show this help message
+    --version, -v   Show version information
+
+INTERACTIVE MODE (default):
+    Run without arguments to launch the interactive menu for managing backup targets.
+
+EXAMPLES:
+    # Install to system PATH
+    sudo ./pbs-client-installer.sh --install
+
+    # Run from anywhere after installation
+    sudo $SCRIPT_NAME
+
+    # Show version
+    sudo $SCRIPT_NAME --version
+
+    # Uninstall from system
+    sudo $SCRIPT_NAME --uninstall
+
+FEATURES:
+    - Multi-target backup support (backup to multiple PBS servers)
+    - File-level and block device backups
+    - Automated backup scheduling with systemd timers
+    - Connection testing and validation
+    - Easy target management (add, edit, delete, view)
+
+DOCUMENTATION:
+    https://github.com/zaphod-black/PBSClientTool
+
+EOF
+}
+
+# Show version
+show_version() {
+    echo "PBSClientTool version $SCRIPT_VERSION"
+}
+
 # Main script execution
 main() {
     echo
@@ -2193,5 +2321,28 @@ main() {
     exit 1
 }
 
-# Run main function
-main "$@"
+# Parse command-line arguments
+case "${1:-}" in
+    --install)
+        install_script
+        ;;
+    --uninstall)
+        uninstall_script
+        ;;
+    --help|-h)
+        show_help
+        ;;
+    --version|-v)
+        show_version
+        ;;
+    "")
+        # No arguments - run interactive mode
+        main
+        ;;
+    *)
+        error "Unknown option: $1"
+        echo
+        echo "Run with --help for usage information"
+        exit 1
+        ;;
+esac
