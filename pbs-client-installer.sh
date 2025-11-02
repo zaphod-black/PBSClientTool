@@ -152,30 +152,45 @@ show_targets_list() {
         return 1
     fi
 
-    list_targets | while read -r target; do
+    # Use process substitution to avoid subshell issues
+    while IFS= read -r target; do
         local config_file="$(get_target_config_path "$target")"
+
+        # Clear any previous variables
+        unset PBS_SERVER PBS_PORT PBS_DATASTORE PBS_REPOSITORY PBS_PASSWORD
+        unset BACKUP_TYPE BACKUP_PATHS EXCLUDE_PATTERNS BLOCK_DEVICE
+        unset TIMER_SCHEDULE TIMER_ONCALENDAR KEEP_LAST KEEP_DAILY KEEP_WEEKLY KEEP_MONTHLY
+        unset BLOCK_DEVICE_FREQUENCY BLOCK_DEVICE_DAY
+
         if [ -f "$config_file" ]; then
             source "$config_file"
 
             echo "Target: $target"
-            echo "  Server: ${PBS_SERVER:-unknown}:${PBS_PORT:-8007}"
-            echo "  Datastore: ${PBS_DATASTORE:-unknown}"
-            echo "  Type: ${BACKUP_TYPE:-unknown}"
-            echo "  Schedule: ${TIMER_SCHEDULE:-unknown}"
 
-            # Check if timer is active
-            if systemctl is-enabled "pbs-backup-${target}.timer" &>/dev/null; then
-                if systemctl is-active "pbs-backup-${target}.timer" &>/dev/null; then
-                    echo "  Status: ✓ Active"
-                else
-                    echo "  Status: ✗ Inactive"
-                fi
+            # Check if config seems incomplete
+            if [ -z "$PBS_SERVER" ] || [ -z "$PBS_DATASTORE" ]; then
+                echo "  Status: ⚠ Incomplete configuration"
+                echo "  Action: Use option 3 (Edit target) to reconfigure"
             else
-                echo "  Status: ✗ Disabled"
+                echo "  Server: ${PBS_SERVER}:${PBS_PORT:-8007}"
+                echo "  Datastore: ${PBS_DATASTORE}"
+                echo "  Type: ${BACKUP_TYPE:-unknown}"
+                echo "  Schedule: ${TIMER_SCHEDULE:-unknown}"
+
+                # Check if timer is active
+                if systemctl is-enabled "pbs-backup-${target}.timer" &>/dev/null; then
+                    if systemctl is-active "pbs-backup-${target}.timer" &>/dev/null; then
+                        echo "  Status: ✓ Active"
+                    else
+                        echo "  Status: ✗ Inactive"
+                    fi
+                else
+                    echo "  Status: ✗ Disabled"
+                fi
             fi
             echo
         fi
-    done
+    done < <(list_targets)
 }
 
 add_target() {
@@ -1908,85 +1923,81 @@ main() {
         # Check if any targets exist
         if list_targets >/dev/null 2>&1; then
             show_targets_list
-            echo
-            echo "════════════════════════════════════════"
-            echo "  Multi-Target Backup Management"
-            echo "════════════════════════════════════════"
-            echo
-            echo "What would you like to do?"
-            echo "  1) List all backup targets"
-            echo "  2) Add new backup target"
-            echo "  3) Edit existing target"
-            echo "  4) Delete target"
-            echo "  5) Run backup now (select target)"
-            echo "  6) View target details"
-            echo "  7) Reinstall PBS client"
-            echo "  8) Exit"
-            ACTION=$(prompt "Select option [1-8]" "1")
 
-            case "$ACTION" in
-                1)
-                    show_targets_list
-                    exit 0
-                    ;;
-                2)
-                    add_target
-                    exit 0
-                    ;;
-                3)
-                    edit_target
-                    exit 0
-                    ;;
-                4)
-                    delete_target
-                    exit 0
-                    ;;
-                5)
-                    echo
-                    echo "Available targets:"
-                    list_targets | nl
-                    echo
-                    TARGET_NAME=$(prompt "Enter target name to backup" "")
+            # Main menu loop
+            while true; do
+                echo
+                echo "════════════════════════════════════════"
+                echo "  Multi-Target Backup Management"
+                echo "════════════════════════════════════════"
+                echo
+                echo "What would you like to do?"
+                echo "  1) List all backup targets"
+                echo "  2) Add new backup target"
+                echo "  3) Edit existing target"
+                echo "  4) Delete target"
+                echo "  5) Run backup now (select target)"
+                echo "  6) View target details"
+                echo "  7) Reinstall PBS client"
+                echo "  8) Exit"
+                ACTION=$(prompt "Select option [1-8]" "8")
 
-                    if ! validate_target_name "$TARGET_NAME"; then
-                        exit 1
-                    fi
+                case "$ACTION" in
+                    1)
+                        show_targets_list
+                        ;;
+                    2)
+                        add_target
+                        ;;
+                    3)
+                        edit_target
+                        ;;
+                    4)
+                        delete_target
+                        ;;
+                    5)
+                        echo
+                        echo "Available targets:"
+                        list_targets | nl
+                        echo
+                        TARGET_NAME=$(prompt "Enter target name to backup" "")
 
-                    if ! target_exists "$TARGET_NAME"; then
-                        error "Target '$TARGET_NAME' does not exist"
-                        exit 1
-                    fi
+                        if ! validate_target_name "$TARGET_NAME"; then
+                            continue
+                        fi
 
-                    run_backup_for_target "$TARGET_NAME"
-                    exit 0
-                    ;;
-                6)
-                    echo
-                    echo "Available targets:"
-                    list_targets | nl
-                    echo
-                    TARGET_NAME=$(prompt "Enter target name to view" "")
+                        if ! target_exists "$TARGET_NAME"; then
+                            error "Target '$TARGET_NAME' does not exist"
+                            continue
+                        fi
 
-                    if validate_target_name "$TARGET_NAME"; then
-                        show_target_detail "$TARGET_NAME"
-                    fi
-                    exit 0
-                    ;;
-                7)
-                    info "Reinstalling PBS client..."
-                    install_pbs_client
-                    log "PBS client reinstalled successfully"
-                    exit 0
-                    ;;
-                8)
-                    info "Exiting"
-                    exit 0
-                    ;;
-                *)
-                    error "Invalid option"
-                    exit 1
-                    ;;
-            esac
+                        run_backup_for_target "$TARGET_NAME"
+                        ;;
+                    6)
+                        echo
+                        echo "Available targets:"
+                        list_targets | nl
+                        echo
+                        TARGET_NAME=$(prompt "Enter target name to view" "")
+
+                        if validate_target_name "$TARGET_NAME"; then
+                            show_target_detail "$TARGET_NAME"
+                        fi
+                        ;;
+                    7)
+                        info "Reinstalling PBS client..."
+                        install_pbs_client
+                        log "PBS client reinstalled successfully"
+                        ;;
+                    8)
+                        info "Exiting"
+                        exit 0
+                        ;;
+                    *)
+                        error "Invalid option"
+                        ;;
+                esac
+            done
         else
             # PBS client installed but no targets configured
             info "No backup targets configured"

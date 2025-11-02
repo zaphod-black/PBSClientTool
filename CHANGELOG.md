@@ -120,6 +120,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Script version bumped to 1.1.0 for multi-target support
 
 ### Fixed
+- **Main menu now loops properly after actions**
+  - Removed `exit 0` calls from all menu options except Exit
+  - Menu now continues after listing targets, running backups, or other actions
+  - Users can perform multiple operations without restarting script
+- **Target list display improved for incomplete configurations**
+  - Shows warning message when PBS_SERVER or PBS_DATASTORE are empty
+  - Suggests using "Edit target" option to fix incomplete configs
+  - Uses process substitution to avoid variable scoping issues
+  - Clears variables between iterations to prevent data carryover
 - **CRITICAL**: SSL fingerprint prompt no longer causes authentication timeout
   - Script now automatically accepts SSL fingerprints by piping 'y' to login
   - This was the root cause of "authentication hanging" issues
