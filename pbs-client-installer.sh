@@ -2121,7 +2121,7 @@ show_version() {
 main() {
     echo
     echo "╔════════════════════════════════════════"
-    echo "║  Proxmox Backup Client Installer"
+    echo "║  Proxmox PBSClient Tool"
     echo "║  Version: ${SCRIPT_VERSION}"
     echo "╚════════════════════════════════════════"
     echo
