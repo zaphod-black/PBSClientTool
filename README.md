@@ -1,10 +1,12 @@
 # PBSClientTool
 
-Interactive tool for installing and managing Proxmox Backup Client on Ubuntu, Debian, and Arch Linux.
+Interactive tool for installing and managing Proxmox Backup Client on **all platforms**: Linux (native), Windows, and macOS (Docker).
+
 <img width="346" height="714" alt="screenshot-2025-11-02_18-48-02" src="https://github.com/user-attachments/assets/6796f247-ef4f-488c-8443-d232dc70b356" />
 
 ## Features
 
+- **Cross-platform support** - Native Linux + Docker for Windows/Mac
 - **Multi-target backups** - Backup to multiple PBS servers for redundancy
 - **Auto-detection** - Automatically detects your Linux distribution
 - **File & block device backups** - Supports .pxar (files) and .img (full disk) backups
@@ -205,6 +207,33 @@ sudo PBSClientTool --uninstall
 cd ~/dev/PBSClientTool
 sudo ./uninstaller.sh
 ```
+
+## Docker Solution (Windows/Mac)
+
+Want to backup Windows or macOS systems? Use the Docker-based solution:
+
+```bash
+cd docker
+./build.sh
+./deploy.sh
+```
+
+The Docker solution provides:
+- **Cross-platform** - Works on Windows, macOS, and Linux
+- **REST API** - Remote management and monitoring
+- **File-level backups** - Daily automated backups
+- **Easy deployment** - Single container, simple configuration
+
+See [docker/README-DOCKER.md](docker/README-DOCKER.md) for complete documentation.
+
+**Platform Support Matrix:**
+
+| Feature | Native Linux | Docker (Win/Mac) |
+|---------|-------------|------------------|
+| File backups | ✅ Yes | ✅ Yes |
+| Block device backups | ✅ Yes | ❌ No |
+| Performance | ✅ Best | ⚠️ Good |
+| Setup complexity | Medium | Easy |
 
 ## Troubleshooting
 

@@ -1,0 +1,80 @@
+version: '3.8'
+
+# PBS Client for macOS
+# Backs up user home directories and important system files
+
+services:
+  pbs-client:
+    image: pbsclient:latest
+    container_name: pbs-backup-client
+    hostname: ${HOSTNAME:-mac-host}
+    restart: unless-stopped
+    
+    environment:
+      # Required: PBS Server Configuration
+      PBS_REPOSITORY: "backup@pbs!token@192.168.1.181:8007:backups"
+      PBS_PASSWORD: "your-api-token-secret-here"
+      
+      # Container Mode
+      MODE: daemon
+      
+      # Backup Configuration
+      BACKUP_SCHEDULE: "0 2 * * *"  # Daily at 2 AM
+      BACKUP_PATHS: "/host-data/Users /host-data/Applications"
+      # macOS-specific exclusions
+      EXCLUDE_PATTERNS: "/host-data/Users/*/Library/Caches /host-data/Users/*/Library/Logs /host-data/Users/*/.Trash /host-data/Users/*/Downloads /host-data/Applications/Xcode.app"
+      CONTAINER_HOSTNAME: "${HOSTNAME:-mac-host}"
+      
+      # Retention Policy
+      KEEP_LAST: 3
+      KEEP_DAILY: 7
+      KEEP_WEEKLY: 4
+      KEEP_MONTHLY: 6
+      
+      # Optional: API Server
+      ENABLE_API: "true"
+      API_PORT: 8080
+      
+      # Timezone
+      TIMEZONE: "America/New_York"
+    
+    volumes:
+      # Mount macOS filesystem
+      # Note: Docker Desktop for Mac has permission restrictions
+      # You may need to grant access in System Preferences → Privacy & Security
+      - /:/host-data:ro
+      
+      # Persistent config and logs
+      - pbs-config:/config
+      - pbs-logs:/logs
+    
+    ports:
+      # API port (optional)
+      - "8080:8080"
+    
+    # Health check
+    healthcheck:
+      test: ["/usr/local/bin/healthcheck"]
+      interval: 5m
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+volumes:
+  pbs-config:
+    name: pbs-client-config
+  pbs-logs:
+    name: pbs-client-logs
+
+# To run on macOS:
+# 1. Install Docker Desktop for Mac
+# 2. Grant Docker file system access:
+#    System Preferences → Privacy & Security → Full Disk Access → Add Docker
+# 3. Edit PBS_REPOSITORY and PBS_PASSWORD above
+# 4. Run: docker-compose -f docker-compose-macos.yml up -d
+#
+# For Time Machine-style backups, consider backing up only:
+# - /Users (home directories)
+# - /Applications (installed apps)
+# - /etc (system configs)
+# - /Library/Application Support (app data)

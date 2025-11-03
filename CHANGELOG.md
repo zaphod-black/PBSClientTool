@@ -8,6 +8,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Docker-based cross-platform solution (v1.2.0 - NEW!)**
+  - Full Docker implementation for Windows, macOS, and Linux
+  - Dockerfile with PBS client in Debian container
+  - Platform-specific docker-compose files (linux/windows/macos)
+  - Daemon mode with internal cron scheduler
+  - One-shot backup mode for manual runs
+  - REST API server for remote management (optional)
+  - Health monitoring and status endpoints
+  - Automatic encryption key generation and management
+  - Build and deployment scripts (`build.sh`, `deploy.sh`)
+  - Complete Docker documentation (README-DOCKER.md, QUICKSTART-DOCKER.md)
+  - Organized in `docker/` subdirectory
+  - Cross-platform backup support matrix in README
+  - Platform-specific exclusion patterns
+  - Metadata change detection for fast incrementals
 - **Multi-target backup support (v1.1.0 - COMPLETE)**
   - Support for multiple backup destinations (different PBS servers for redundancy)
   - Named backup targets (e.g., "offsite", "local", "backup1")
