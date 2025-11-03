@@ -15,7 +15,9 @@ from pathlib import Path
 # Configuration
 PORT = int(os.getenv('API_PORT', '8080'))
 LOG_DIR = Path('/logs')
+CONFIG_DIR = Path('/config')
 DASHBOARD_PATH = Path('/usr/local/share/dashboard.html')
+CONFIG_FILE = CONFIG_DIR / 'settings.json'
 
 # Setup logging
 logging.basicConfig(
@@ -125,6 +127,12 @@ class PBSAPIHandler(BaseHTTPRequestHandler):
                 self.send_text('No logs available yet')
             return
 
+        # Config endpoint
+        if path == '/config':
+            config = self._load_config()
+            self.send_json(config)
+            return
+
         # Not found - show available endpoints
         self.send_json({
             'error': 'Not found',
@@ -134,6 +142,7 @@ class PBSAPIHandler(BaseHTTPRequestHandler):
                 '/status - Current backup status (JSON)',
                 '/health - Health check (JSON)',
                 '/logs - Recent backup logs (text)',
+                '/config - Get/Set configuration (GET/POST)',
                 '/backup - Trigger backup (POST)'
             ]
         }, status=404)
@@ -156,7 +165,7 @@ class PBSAPIHandler(BaseHTTPRequestHandler):
                 params = {}
 
             # Trigger backup script
-            backup_script = '/usr/local/bin/backup'
+            backup_script = '/usr/local/bin/pbs-backup'
             if Path(backup_script).exists():
                 log.info('Triggering backup via API...')
                 os.system(f'{backup_script} > /logs/backup.log 2>&1 &')
@@ -172,14 +181,84 @@ class PBSAPIHandler(BaseHTTPRequestHandler):
                 }, status=500)
             return
 
+        # Save config
+        if path == '/config':
+            content_length = int(self.headers.get('Content-Length', 0))
+            if content_length > 0:
+                body = self.rfile.read(content_length)
+                try:
+                    new_config = json.loads(body)
+                    self._save_config(new_config)
+                    self.send_json({
+                        'status': 'success',
+                        'message': 'Configuration saved',
+                        'config': new_config
+                    })
+                except json.JSONDecodeError as e:
+                    self.send_json({
+                        'error': 'Invalid JSON',
+                        'details': str(e)
+                    }, status=400)
+                except Exception as e:
+                    self.send_json({
+                        'error': 'Failed to save config',
+                        'details': str(e)
+                    }, status=500)
+            else:
+                self.send_json({
+                    'error': 'No config data provided'
+                }, status=400)
+            return
+
         # Not found
         self.send_json({
             'error': 'Not found',
             'path': path,
             'available_endpoints': [
-                '/backup - Trigger backup (POST)'
+                '/backup - Trigger backup (POST)',
+                '/config - Save configuration (POST)'
             ]
         }, status=404)
+
+    def _load_config(self):
+        """Load configuration from file or environment"""
+        config = {
+            'pbs_repository': os.getenv('PBS_REPOSITORY', ''),
+            'pbs_password': os.getenv('PBS_PASSWORD', ''),
+            'backup_hostname': os.getenv('BACKUP_HOSTNAME', os.uname().nodename),
+            'backup_paths': os.getenv('BACKUP_PATHS', '/host-data'),
+            'exclude_patterns': os.getenv('EXCLUDE_PATTERNS', ''),
+            'backup_schedule': os.getenv('BACKUP_SCHEDULE', '0 2 * * *'),
+            'timezone': os.getenv('TIMEZONE', 'UTC')
+        }
+
+        # Override with file config if exists
+        if CONFIG_FILE.exists():
+            try:
+                file_config = json.loads(CONFIG_FILE.read_text())
+                config.update(file_config)
+            except:
+                pass
+
+        return config
+
+    def _save_config(self, config):
+        """Save configuration to file"""
+        CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+        CONFIG_FILE.write_text(json.dumps(config, indent=2))
+        log.info('Configuration saved to /config/settings.json')
+
+        # Also update environment for current process
+        if 'pbs_repository' in config:
+            os.environ['PBS_REPOSITORY'] = config['pbs_repository']
+        if 'pbs_password' in config:
+            os.environ['PBS_PASSWORD'] = config['pbs_password']
+        if 'backup_hostname' in config:
+            os.environ['BACKUP_HOSTNAME'] = config['backup_hostname']
+        if 'backup_paths' in config:
+            os.environ['BACKUP_PATHS'] = config['backup_paths']
+        if 'exclude_patterns' in config:
+            os.environ['EXCLUDE_PATTERNS'] = config['exclude_patterns']
 
     def _get_uptime(self):
         """Get container uptime"""

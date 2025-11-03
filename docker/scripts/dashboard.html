@@ -125,6 +125,113 @@
             cursor: not-allowed;
         }
 
+        /* Modal styles */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(10, 10, 20, 0.95);
+            animation: fadeIn 0.3s;
+        }
+
+        .modal.active {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-content {
+            background: #0f0f1a;
+            border: 3px solid #aa00ff;
+            padding: 30px;
+            max-width: 600px;
+            width: 90%;
+            max-height: 90vh;
+            overflow-y: auto;
+            box-shadow: 0 0 50px rgba(170, 0, 255, 0.5);
+            position: relative;
+        }
+
+        .modal-title {
+            color: #aa00ff;
+            font-size: 22px;
+            margin-bottom: 20px;
+            text-transform: uppercase;
+            letter-spacing: 3px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-label {
+            display: block;
+            color: #00d4ff;
+            font-size: 14px;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .form-input, .form-textarea {
+            width: 100%;
+            background: #05050a;
+            border: 2px solid #aa00ff;
+            color: #00d4ff;
+            padding: 12px;
+            font-family: 'JetBrains Mono', 'Courier New', monospace;
+            font-size: 15px;
+            box-sizing: border-box;
+        }
+
+        .form-input:focus, .form-textarea:focus {
+            outline: none;
+            border-color: #00d4ff;
+            box-shadow: 0 0 15px rgba(0, 212, 255, 0.3);
+        }
+
+        .form-textarea {
+            min-height: 80px;
+            resize: vertical;
+        }
+
+        .form-help {
+            color: #888;
+            font-size: 12px;
+            margin-top: 5px;
+        }
+
+        .modal-buttons {
+            display: flex;
+            gap: 15px;
+            margin-top: 25px;
+        }
+
+        .close-button {
+            position: absolute;
+            top: 15px;
+            right: 20px;
+            background: none;
+            border: none;
+            color: #ff3366;
+            font-size: 30px;
+            cursor: pointer;
+            line-height: 1;
+        }
+
+        .close-button:hover {
+            color: #ff6699;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
         .log-viewer {
             background: #000;
             padding: 18px;
@@ -369,6 +476,7 @@
         <!-- Actions -->
         <div class="box">
             <div class="box-title">► ACTIONS</div>
+            <button class="button" onclick="openSettings()">⚙ Settings</button>
             <button class="button" onclick="runBackup()">▶ Run Backup Now</button>
             <button class="button" onclick="refreshStatus()">↻ Refresh Status</button>
             <button class="button" onclick="downloadEncryptionKey()">🔑 Download Encryption Key</button>
@@ -403,6 +511,70 @@
 
         <div class="timestamp">
             Last updated: <span id="last-update">---</span> | Auto-refresh: <span class="blink">●</span> 30s
+        </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settings-modal" class="modal">
+        <div class="modal-content">
+            <button class="close-button" onclick="closeSettings()">&times;</button>
+            <div class="modal-title">⚙ Configuration</div>
+
+            <form id="config-form" onsubmit="saveSettings(event)">
+                <div class="form-group">
+                    <label class="form-label">PBS Repository</label>
+                    <input type="text" id="pbs_repository" class="form-input"
+                           placeholder="user@pam!token@host:port:datastore" required>
+                    <div class="form-help">Example: backup@pam!mytoken@192.168.1.100:8007:backups</div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">PBS Password/Token Secret</label>
+                    <input type="password" id="pbs_password" class="form-input"
+                           placeholder="API token secret or password" required>
+                    <div class="form-help">API token secret (recommended) or user password</div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Backup Hostname</label>
+                    <input type="text" id="backup_hostname" class="form-input"
+                           placeholder="my-server">
+                    <div class="form-help">Hostname for backups (default: container hostname)</div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Backup Paths</label>
+                    <input type="text" id="backup_paths" class="form-input"
+                           placeholder="/host-data">
+                    <div class="form-help">Space-separated paths to backup</div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Exclude Patterns</label>
+                    <textarea id="exclude_patterns" class="form-textarea"
+                              placeholder="/host-data/tmp&#10;/host-data/*.log"></textarea>
+                    <div class="form-help">One pattern per line (optional)</div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Backup Schedule (Cron)</label>
+                    <input type="text" id="backup_schedule" class="form-input"
+                           placeholder="0 2 * * *">
+                    <div class="form-help">Cron expression (e.g., "0 2 * * *" for 2 AM daily)</div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Timezone</label>
+                    <input type="text" id="timezone" class="form-input"
+                           placeholder="UTC">
+                    <div class="form-help">e.g., America/New_York, Europe/London</div>
+                </div>
+
+                <div class="modal-buttons">
+                    <button type="submit" class="button">💾 Save Configuration</button>
+                    <button type="button" class="button" onclick="closeSettings()">✖ Cancel</button>
+                </div>
+            </form>
         </div>
     </div>
 
@@ -585,6 +757,65 @@
         // Download encryption key
         function downloadEncryptionKey() {
             alert('To download encryption key:\n\ndocker cp pbs-backup-client:/config/encryption-key.json ./\n\nRun this command in your terminal.');
+        }
+
+        // Settings modal functions
+        function openSettings() {
+            fetch('/config')
+                .then(r => r.json())
+                .then(config => {
+                    document.getElementById('pbs_repository').value = config.pbs_repository || '';
+                    document.getElementById('pbs_password').value = config.pbs_password || '';
+                    document.getElementById('backup_hostname').value = config.backup_hostname || '';
+                    document.getElementById('backup_paths').value = config.backup_paths || '/host-data';
+                    document.getElementById('exclude_patterns').value = (config.exclude_patterns || '').replace(/ /g, '\n');
+                    document.getElementById('backup_schedule').value = config.backup_schedule || '0 2 * * *';
+                    document.getElementById('timezone').value = config.timezone || 'UTC';
+
+                    document.getElementById('settings-modal').classList.add('active');
+                })
+                .catch(err => {
+                    console.error('Failed to load config:', err);
+                    alert('Failed to load configuration');
+                });
+        }
+
+        function closeSettings() {
+            document.getElementById('settings-modal').classList.remove('active');
+        }
+
+        function saveSettings(event) {
+            event.preventDefault();
+
+            const config = {
+                pbs_repository: document.getElementById('pbs_repository').value,
+                pbs_password: document.getElementById('pbs_password').value,
+                backup_hostname: document.getElementById('backup_hostname').value,
+                backup_paths: document.getElementById('backup_paths').value,
+                exclude_patterns: document.getElementById('exclude_patterns').value.split('\n').join(' ').trim(),
+                backup_schedule: document.getElementById('backup_schedule').value,
+                timezone: document.getElementById('timezone').value
+            };
+
+            fetch('/config', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(config)
+            })
+            .then(r => r.json())
+            .then(result => {
+                if (result.status === 'success') {
+                    alert('✓ Configuration saved successfully!\n\nNote: Restart container for cron schedule changes to take effect.');
+                    closeSettings();
+                    refreshStatus();
+                } else {
+                    alert('Failed to save configuration: ' + (result.error || 'Unknown error'));
+                }
+            })
+            .catch(err => {
+                console.error('Failed to save config:', err);
+                alert('Failed to save configuration: ' + err.message);
+            });
         }
 
         // Helper functions
