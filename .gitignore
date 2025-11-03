@@ -1,0 +1,54 @@
+# Credentials and secrets
+*.key
+*.pem
+*.json.bak
+encryption-key*.json
+encryption-key*.txt
+.env
+.env.*
+credentials*
+secrets*
+
+# Configuration files that might contain credentials
+/config/
+pbs-client.conf
+*.conf.backup
+
+# Logs that might contain sensitive info
+*.log
+/logs/
+
+# Temporary files
+*.tmp
+*.swp
+*.swo
+*~
+.DS_Store
+
+# IDE files
+.vscode/
+.idea/
+*.code-workspace
+
+# Build artifacts
+*.o
+*.a
+*.so
+dist/
+build/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+venv/
+env/
+ENV/
+
+# Docker
+docker-compose.override.yml
+
+# Test artifacts
+test-results/
+coverage/
