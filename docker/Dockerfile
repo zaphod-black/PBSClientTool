@@ -16,7 +16,7 @@ RUN apt-get update && \
     cron \
     curl \
     jq \
-    netcat-openbsd \
+    python3 \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
@@ -38,12 +38,14 @@ COPY scripts/entrypoint.sh /usr/local/bin/
 COPY scripts/backup.sh /usr/local/bin/pbs-backup
 COPY scripts/healthcheck.sh /usr/local/bin/healthcheck
 COPY scripts/api-server.sh /usr/local/bin/api-server
+COPY scripts/api-server.py /usr/local/bin/api-server.py
 COPY scripts/dashboard.html /usr/local/share/dashboard.html
 
 RUN chmod +x /usr/local/bin/entrypoint.sh \
              /usr/local/bin/pbs-backup \
              /usr/local/bin/healthcheck \
-             /usr/local/bin/api-server
+             /usr/local/bin/api-server \
+             /usr/local/bin/api-server.py
 
 # Expose API port (optional)
 EXPOSE 8080

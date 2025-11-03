@@ -220,9 +220,17 @@ cd docker
 
 The Docker solution provides:
 - **Cross-platform** - Works on Windows, macOS, and Linux
+- **Web Dashboard** - Real-time monitoring with retro terminal UI (http://localhost:8080)
 - **REST API** - Remote management and monitoring
 - **File-level backups** - Daily automated backups
 - **Easy deployment** - Single container, simple configuration
+
+**Web Dashboard Features:**
+- Live backup status and progress
+- System health monitoring
+- Backup history and logs
+- Manual backup trigger
+- Retro blue/purple neon aesthetic
 
 See [docker/README-DOCKER.md](docker/README-DOCKER.md) for complete documentation.
 
