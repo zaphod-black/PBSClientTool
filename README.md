@@ -208,24 +208,56 @@ cd ~/dev/PBSClientTool
 sudo ./uninstaller.sh
 ```
 
-## Docker Solution (Windows/Mac)
+## Docker Solution (Windows/Mac) - 🚧 IN DEVELOPMENT
+
+> ⚠️ **Note:** The Docker solution is currently in active development. The native Linux installer above is the **stable, production-ready version**. Use Docker for cross-platform testing or if you need Windows/Mac support.
 
 Want to backup Windows or macOS systems? Use the Docker-based solution:
 
+### Quick Start
+
+**1. Build the image:**
 ```bash
 cd docker
 ./build.sh
-./deploy.sh
 ```
 
-The Docker solution provides:
+**2. Run the container:**
+```bash
+docker run -d \
+  --name pbs-backup \
+  -p 8080:8080 \
+  -v /path/to/backup:/host-data:ro \
+  -v pbs-config:/config \
+  -v pbs-logs:/logs \
+  -e MODE=daemon \
+  -e ENABLE_API=true \
+  pbsclient:latest
+```
+
+Replace `/path/to/backup` with your data directory:
+- **Home directory**: `-v /home/username:/host-data:ro`
+- **Entire system**: `-v /:/host-data:ro`
+- **Specific folder**: `-v /data:/host-data:ro`
+
+**3. Configure via web UI:**
+- Open http://localhost:8080
+- Click **⚙ Settings**
+- Enter your PBS server details
+- Click **💾 Save Configuration**
+- Click **▶ Run Backup Now** to test
+
+### What It Provides
+
 - **Cross-platform** - Works on Windows, macOS, and Linux
-- **Web Dashboard** - Real-time monitoring with retro terminal UI (http://localhost:8080)
+- **Web Dashboard** - Real-time monitoring with retro terminal UI
+- **Configuration UI** - Set up PBS backups from your browser
 - **REST API** - Remote management and monitoring
 - **File-level backups** - Daily automated backups
 - **Easy deployment** - Single container, simple configuration
 
 **Web Dashboard Features:**
+- Settings page for PBS configuration
 - Live backup status and progress
 - System health monitoring
 - Backup history and logs
