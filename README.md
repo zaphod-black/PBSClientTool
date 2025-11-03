@@ -1,6 +1,7 @@
 # PBSClientTool
 
 Interactive tool for installing and managing Proxmox Backup Client on Ubuntu, Debian, and Arch Linux.
+<img width="346" height="714" alt="screenshot-2025-11-02_18-48-02" src="https://github.com/user-attachments/assets/6796f247-ef4f-488c-8443-d232dc70b356" />
 
 ## Features
 
