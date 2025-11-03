@@ -58,6 +58,58 @@ prompt_password() {
     echo "$user_input"
 }
 
+# Calculate estimated backup size for files
+calculate_file_backup_size() {
+    local paths="$1"
+    local exclude_patterns="$2"
+    local total_size=0
+
+    for path in $paths; do
+        if [ -e "$path" ]; then
+            # Build exclude arguments for du
+            local exclude_args=""
+            for pattern in $exclude_patterns; do
+                exclude_args="$exclude_args --exclude=$pattern"
+            done
+
+            # Calculate size (in KB) and add to total
+            local path_size=$(du -sk $exclude_args "$path" 2>/dev/null | awk '{print $1}' || echo "0")
+            total_size=$((total_size + path_size))
+        fi
+    done
+
+    # Convert KB to human-readable format
+    if [ $total_size -ge 1048576 ]; then
+        # GB
+        echo "scale=2; $total_size / 1048576" | bc | awk '{printf "%.1f GB", $1}'
+    elif [ $total_size -ge 1024 ]; then
+        # MB
+        echo "scale=2; $total_size / 1024" | bc | awk '{printf "%.1f MB", $1}'
+    else
+        # KB
+        echo "${total_size} KB"
+    fi
+}
+
+# Get block device size
+get_block_device_size() {
+    local device="$1"
+
+    if [ ! -b "$device" ]; then
+        echo "unknown"
+        return
+    fi
+
+    # Try blockdev first, fall back to lsblk
+    if command -v blockdev &>/dev/null; then
+        local size_bytes=$(blockdev --getsize64 "$device" 2>/dev/null || echo "0")
+        local size_gb=$(echo "scale=2; $size_bytes / 1073741824" | bc 2>/dev/null || echo "0")
+        echo "${size_gb} GB"
+    else
+        lsblk -b -d -n -o SIZE "$device" 2>/dev/null | awk '{printf "%.1f GB", $1/1073741824}' || echo "unknown"
+    fi
+}
+
 # Multi-target helper functions
 list_targets() {
     if [ ! -d "$TARGETS_DIR" ]; then
@@ -796,6 +848,13 @@ reconfigure_backup_settings() {
     if [[ "$BACKUP_TYPE" == "files" ]] || [[ "$BACKUP_TYPE" == "both" ]]; then
         BACKUP_PATHS=$(prompt "Enter paths to backup (space-separated)" "$BACKUP_PATHS")
         EXCLUDE_PATTERNS=$(prompt "Enter exclusion patterns (space-separated)" "$EXCLUDE_PATTERNS")
+
+        # Calculate and display estimated file backup size
+        echo
+        info "Calculating estimated backup size..."
+        ESTIMATED_FILE_SIZE=$(calculate_file_backup_size "$BACKUP_PATHS" "$EXCLUDE_PATTERNS")
+        echo -e "${GREEN}✓${NC} Estimated file backup size: ${YELLOW}${ESTIMATED_FILE_SIZE}${NC}"
+        info "Note: Actual size may be smaller due to PBS deduplication and compression"
     fi
 
     if [[ "$BACKUP_TYPE" == "block" ]] || [[ "$BACKUP_TYPE" == "both" ]]; then
@@ -824,6 +883,11 @@ reconfigure_backup_settings() {
                 error "Configuration cancelled"
                 return 1
             fi
+        else
+            # Display block device size
+            BLOCK_DEVICE_SIZE=$(get_block_device_size "$BLOCK_DEVICE")
+            echo -e "${GREEN}✓${NC} Block device size: ${YELLOW}${BLOCK_DEVICE_SIZE}${NC}"
+            warn "Note: Block device backups can take 20-30+ minutes depending on size"
         fi
     fi
 
@@ -887,10 +951,16 @@ reconfigure_backup_settings() {
 
     if [[ "$BACKUP_TYPE" == "files" ]] || [[ "$BACKUP_TYPE" == "both" ]]; then
         echo "  Backup Paths: ${BACKUP_PATHS}"
+        if [ -n "$ESTIMATED_FILE_SIZE" ]; then
+            echo "  Estimated File Backup Size: ${ESTIMATED_FILE_SIZE}"
+        fi
     fi
 
     if [[ "$BACKUP_TYPE" == "block" ]] || [[ "$BACKUP_TYPE" == "both" ]]; then
         echo "  Block Device: ${BLOCK_DEVICE}"
+        if [ -n "$BLOCK_DEVICE_SIZE" ]; then
+            echo "  Block Device Size: ${BLOCK_DEVICE_SIZE}"
+        fi
     fi
 
     if [[ "$BACKUP_TYPE" == "both" ]]; then
@@ -1112,6 +1182,13 @@ interactive_config() {
     if [[ "$BACKUP_TYPE" == "files" ]] || [[ "$BACKUP_TYPE" == "both" ]]; then
         BACKUP_PATHS=$(prompt "Enter paths to backup (space-separated)" "/")
         EXCLUDE_PATTERNS=$(prompt "Enter exclusion patterns (space-separated)" "/tmp /var/tmp /var/cache /proc /sys /dev /run")
+
+        # Calculate and display estimated file backup size
+        echo
+        info "Calculating estimated backup size..."
+        ESTIMATED_FILE_SIZE=$(calculate_file_backup_size "$BACKUP_PATHS" "$EXCLUDE_PATTERNS")
+        echo -e "${GREEN}✓${NC} Estimated file backup size: ${YELLOW}${ESTIMATED_FILE_SIZE}${NC}"
+        info "Note: Actual size may be smaller due to PBS deduplication and compression"
     fi
     
     if [[ "$BACKUP_TYPE" == "block" ]] || [[ "$BACKUP_TYPE" == "both" ]]; then
@@ -1144,6 +1221,11 @@ interactive_config() {
                 error "Installation cancelled"
                 exit 1
             fi
+        else
+            # Display block device size
+            BLOCK_DEVICE_SIZE=$(get_block_device_size "$BLOCK_DEVICE")
+            echo -e "${GREEN}✓${NC} Block device size: ${YELLOW}${BLOCK_DEVICE_SIZE}${NC}"
+            warn "Note: Block device backups can take 20-30+ minutes depending on size"
         fi
     fi
     
@@ -1955,10 +2037,16 @@ show_summary() {
     
     if [[ "$BACKUP_TYPE" == "files" ]] || [[ "$BACKUP_TYPE" == "both" ]]; then
         echo "  Backup Paths: ${BACKUP_PATHS}"
+        if [ -n "$ESTIMATED_FILE_SIZE" ]; then
+            echo "  Estimated File Backup Size: ${ESTIMATED_FILE_SIZE}"
+        fi
     fi
-    
+
     if [[ "$BACKUP_TYPE" == "block" ]] || [[ "$BACKUP_TYPE" == "both" ]]; then
         echo "  Block Device: ${BLOCK_DEVICE}"
+        if [ -n "$BLOCK_DEVICE_SIZE" ]; then
+            echo "  Block Device Size: ${BLOCK_DEVICE_SIZE}"
+        fi
     fi
     
     if [[ "$BACKUP_TYPE" == "both" ]]; then
