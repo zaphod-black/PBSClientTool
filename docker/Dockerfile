@@ -16,6 +16,7 @@ RUN apt-get update && \
     cron \
     curl \
     jq \
+    netcat-openbsd \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
@@ -37,6 +38,7 @@ COPY scripts/entrypoint.sh /usr/local/bin/
 COPY scripts/backup.sh /usr/local/bin/pbs-backup
 COPY scripts/healthcheck.sh /usr/local/bin/healthcheck
 COPY scripts/api-server.sh /usr/local/bin/api-server
+COPY scripts/dashboard.html /usr/local/share/dashboard.html
 
 RUN chmod +x /usr/local/bin/entrypoint.sh \
              /usr/local/bin/pbs-backup \

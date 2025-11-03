@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PBS Backup Monitor</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: #0a0a0a;
+            color: #00ff00;
+            font-family: 'JetBrains Mono', 'Courier New', monospace;
+            font-size: 14px;
+            line-height: 1.4;
+            padding: 20px;
+            overflow-x: hidden;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .header {
+            color: #00ff41;
+            text-shadow: 0 0 10px #00ff41;
+            margin-bottom: 20px;
+            white-space: pre;
+            font-size: 10px;
+            line-height: 1;
+        }
+
+        .box {
+            border: 2px solid #00ff41;
+            padding: 15px;
+            margin-bottom: 15px;
+            background: #0f0f0f;
+            box-shadow: 0 0 20px rgba(0, 255, 65, 0.1);
+        }
+
+        .box-title {
+            color: #ffaa00;
+            margin-bottom: 10px;
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        .status-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+
+        .status-item {
+            padding: 8px;
+            background: #050505;
+            border-left: 3px solid #00ff41;
+        }
+
+        .status-label {
+            color: #888;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .status-value {
+            color: #00ff41;
+            font-size: 16px;
+            font-weight: bold;
+            margin-top: 3px;
+        }
+
+        .status-value.error {
+            color: #ff3333;
+            text-shadow: 0 0 5px #ff3333;
+        }
+
+        .status-value.warning {
+            color: #ffaa00;
+        }
+
+        .status-value.success {
+            color: #00ff41;
+            text-shadow: 0 0 5px #00ff41;
+        }
+
+        .button {
+            background: #003300;
+            border: 2px solid #00ff41;
+            color: #00ff41;
+            padding: 10px 20px;
+            cursor: pointer;
+            font-family: inherit;
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            transition: all 0.2s;
+            margin-right: 10px;
+            margin-bottom: 10px;
+        }
+
+        .button:hover {
+            background: #00ff41;
+            color: #0a0a0a;
+            box-shadow: 0 0 20px #00ff41;
+        }
+
+        .button:active {
+            transform: scale(0.98);
+        }
+
+        .button:disabled {
+            opacity: 0.3;
+            cursor: not-allowed;
+        }
+
+        .log-viewer {
+            background: #000;
+            padding: 15px;
+            height: 300px;
+            overflow-y: auto;
+            font-size: 12px;
+            border: 1px solid #00ff41;
+            margin-top: 10px;
+        }
+
+        .log-line {
+            margin-bottom: 2px;
+            color: #00ff41;
+        }
+
+        .log-line.error {
+            color: #ff3333;
+        }
+
+        .log-line.warning {
+            color: #ffaa00;
+        }
+
+        .log-line.info {
+            color: #00aaff;
+        }
+
+        .backup-history {
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .backup-entry {
+            padding: 8px;
+            margin-bottom: 5px;
+            background: #050505;
+            border-left: 3px solid #00ff41;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .backup-entry.failed {
+            border-left-color: #ff3333;
+        }
+
+        .backup-time {
+            color: #888;
+            font-size: 12px;
+        }
+
+        .backup-status {
+            font-weight: bold;
+        }
+
+        .backup-status.success {
+            color: #00ff41;
+        }
+
+        .backup-status.failed {
+            color: #ff3333;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 20px;
+            background: #050505;
+            border: 1px solid #00ff41;
+            margin-top: 10px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #003300, #00ff41);
+            width: 0%;
+            transition: width 0.5s;
+            box-shadow: 0 0 10px #00ff41;
+        }
+
+        .progress-text {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #00ff41;
+            font-size: 11px;
+            font-weight: bold;
+            text-shadow: 0 0 5px #000;
+        }
+
+        .blink {
+            animation: blink 1s infinite;
+        }
+
+        @keyframes blink {
+            0%, 50% { opacity: 1; }
+            51%, 100% { opacity: 0.3; }
+        }
+
+        .scanline {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: repeating-linear-gradient(
+                0deg,
+                rgba(0, 0, 0, 0.1),
+                rgba(0, 0, 0, 0.1) 1px,
+                transparent 1px,
+                transparent 2px
+            );
+            pointer-events: none;
+            z-index: 9999;
+        }
+
+        .ascii-border {
+            color: #00ff41;
+            white-space: pre;
+            font-size: 10px;
+            line-height: 1;
+            margin: 10px 0;
+        }
+
+        ::-webkit-scrollbar {
+            width: 10px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #0a0a0a;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #00ff41;
+            border: 1px solid #0a0a0a;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #00ff88;
+        }
+
+        .metric {
+            display: inline-block;
+            padding: 5px 10px;
+            background: #050505;
+            border: 1px solid #00ff41;
+            margin-right: 10px;
+            margin-bottom: 5px;
+        }
+
+        .metric-label {
+            color: #888;
+            font-size: 10px;
+        }
+
+        .metric-value {
+            color: #00ff41;
+            font-weight: bold;
+            font-size: 14px;
+        }
+
+        .timestamp {
+            color: #555;
+            font-size: 11px;
+            text-align: right;
+            margin-top: 20px;
+        }
+
+        @media (max-width: 768px) {
+            body {
+                font-size: 12px;
+                padding: 10px;
+            }
+            .status-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="scanline"></div>
+    <div class="container">
+        <div class="header">
+╔═══════════════════════════════════════════════════════════════════════════╗
+║                   PROXMOX BACKUP CLIENT MONITOR v1.2.0                    ║
+║                          [DOCKER CONTAINER MODE]                          ║
+╚═══════════════════════════════════════════════════════════════════════════╝
+        </div>
+
+        <!-- System Status -->
+        <div class="box">
+            <div class="box-title">► SYSTEM STATUS</div>
+            <div class="status-grid">
+                <div class="status-item">
+                    <div class="status-label">Container Health</div>
+                    <div class="status-value" id="health-status">---</div>
+                </div>
+                <div class="status-item">
+                    <div class="status-label">Last Backup</div>
+                    <div class="status-value" id="last-backup">Never</div>
+                </div>
+                <div class="status-item">
+                    <div class="status-label">Next Scheduled</div>
+                    <div class="status-value" id="next-backup">---</div>
+                </div>
+                <div class="status-item">
+                    <div class="status-label">Backup Status</div>
+                    <div class="status-value" id="backup-status">Idle</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Configuration -->
+        <div class="box">
+            <div class="box-title">► CONFIGURATION</div>
+            <div class="metric">
+                <div class="metric-label">REPOSITORY</div>
+                <div class="metric-value" id="config-repo">---</div>
+            </div>
+            <div class="metric">
+                <div class="metric-label">HOSTNAME</div>
+                <div class="metric-value" id="config-host">---</div>
+            </div>
+            <div class="metric">
+                <div class="metric-label">SCHEDULE</div>
+                <div class="metric-value" id="config-schedule">---</div>
+            </div>
+            <div class="metric">
+                <div class="metric-label">PATHS</div>
+                <div class="metric-value" id="config-paths">---</div>
+            </div>
+        </div>
+
+        <!-- Actions -->
+        <div class="box">
+            <div class="box-title">► ACTIONS</div>
+            <button class="button" onclick="runBackup()">▶ Run Backup Now</button>
+            <button class="button" onclick="refreshStatus()">↻ Refresh Status</button>
+            <button class="button" onclick="downloadEncryptionKey()">🔑 Download Encryption Key</button>
+            <button class="button" onclick="toggleLogs()">📜 Toggle Logs</button>
+            <div id="backup-progress" style="display:none;">
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progress-fill"></div>
+                    <div class="progress-text" id="progress-text">Running backup...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Logs -->
+        <div class="box" id="logs-box" style="display:none;">
+            <div class="box-title">► SYSTEM LOGS</div>
+            <div class="log-viewer" id="log-viewer">
+                <div class="log-line">Waiting for logs...</div>
+            </div>
+        </div>
+
+        <!-- Backup History -->
+        <div class="box">
+            <div class="box-title">► BACKUP HISTORY</div>
+            <div class="backup-history" id="backup-history">
+                <div style="color: #888; text-align: center; padding: 20px;">Loading history...</div>
+            </div>
+        </div>
+
+        <div class="ascii-border">
+═══════════════════════════════════════════════════════════════════════════
+        </div>
+
+        <div class="timestamp">
+            Last updated: <span id="last-update">---</span> | Auto-refresh: <span class="blink">●</span> 30s
+        </div>
+    </div>
+
+    <script>
+        let backupRunning = false;
+        let logsVisible = false;
+
+        // Fetch status from API
+        async function fetchStatus() {
+            try {
+                const response = await fetch('/status');
+                const data = await response.json();
+                updateStatus(data);
+            } catch (error) {
+                console.error('Failed to fetch status:', error);
+                document.getElementById('health-status').className = 'status-value error';
+                document.getElementById('health-status').textContent = 'ERROR';
+            }
+        }
+
+        // Fetch health from API
+        async function fetchHealth() {
+            try {
+                const response = await fetch('/health');
+                const data = await response.json();
+                const healthEl = document.getElementById('health-status');
+
+                if (data.status === 'healthy') {
+                    healthEl.className = 'status-value success';
+                    healthEl.textContent = '✓ HEALTHY';
+                } else {
+                    healthEl.className = 'status-value error';
+                    healthEl.textContent = '✗ UNHEALTHY';
+                }
+            } catch (error) {
+                const healthEl = document.getElementById('health-status');
+                healthEl.className = 'status-value error';
+                healthEl.textContent = '✗ ERROR';
+            }
+        }
+
+        // Fetch logs from API
+        async function fetchLogs() {
+            if (!logsVisible) return;
+
+            try {
+                const response = await fetch('/logs');
+                const data = await response.json();
+
+                if (data.logs && Array.isArray(data.logs)) {
+                    const logViewer = document.getElementById('log-viewer');
+                    logViewer.innerHTML = data.logs.map(line => {
+                        let className = 'log-line';
+                        if (line.toLowerCase().includes('error')) className += ' error';
+                        else if (line.toLowerCase().includes('warn')) className += ' warning';
+                        else if (line.toLowerCase().includes('info')) className += ' info';
+
+                        return `<div class="${className}">${escapeHtml(line)}</div>`;
+                    }).join('');
+
+                    // Auto-scroll to bottom
+                    logViewer.scrollTop = logViewer.scrollHeight;
+                }
+            } catch (error) {
+                console.error('Failed to fetch logs:', error);
+            }
+        }
+
+        // Update status UI
+        function updateStatus(data) {
+            if (data.last_backup) {
+                const lastBackup = new Date(data.last_backup);
+                const now = new Date();
+                const diffMinutes = Math.floor((now - lastBackup) / 60000);
+
+                let timeAgo;
+                if (diffMinutes < 1) timeAgo = 'Just now';
+                else if (diffMinutes < 60) timeAgo = `${diffMinutes}m ago`;
+                else if (diffMinutes < 1440) timeAgo = `${Math.floor(diffMinutes/60)}h ago`;
+                else timeAgo = `${Math.floor(diffMinutes/1440)}d ago`;
+
+                document.getElementById('last-backup').textContent = timeAgo;
+            }
+
+            const statusEl = document.getElementById('backup-status');
+            if (data.success === true) {
+                statusEl.className = 'status-value success';
+                statusEl.textContent = '✓ Success';
+            } else if (data.success === false) {
+                statusEl.className = 'status-value error';
+                statusEl.textContent = '✗ Failed';
+            } else {
+                statusEl.className = 'status-value';
+                statusEl.textContent = 'Idle';
+            }
+
+            if (data.hostname) {
+                document.getElementById('config-host').textContent = data.hostname;
+            }
+
+            if (data.paths) {
+                document.getElementById('config-paths').textContent =
+                    Array.isArray(data.paths) ? data.paths.join(', ') : data.paths;
+            }
+
+            // Update config from environment (mock data)
+            const repo = getEnvVar('PBS_REPOSITORY', 'Not configured');
+            const schedule = getEnvVar('BACKUP_SCHEDULE', '0 2 * * *');
+
+            document.getElementById('config-repo').textContent = maskSensitive(repo);
+            document.getElementById('config-schedule').textContent = schedule;
+
+            document.getElementById('last-update').textContent = new Date().toLocaleString();
+        }
+
+        // Run manual backup
+        async function runBackup() {
+            if (backupRunning) return;
+
+            backupRunning = true;
+            document.getElementById('backup-progress').style.display = 'block';
+            document.getElementById('progress-fill').style.width = '0%';
+
+            try {
+                const response = await fetch('/backup', { method: 'POST' });
+                const data = await response.json();
+
+                // Simulate progress
+                let progress = 0;
+                const interval = setInterval(() => {
+                    progress += Math.random() * 15;
+                    if (progress > 90) progress = 90;
+                    document.getElementById('progress-fill').style.width = progress + '%';
+                    document.getElementById('progress-text').textContent =
+                        `Running backup... ${Math.floor(progress)}%`;
+                }, 1000);
+
+                // Check status every 5 seconds
+                const statusCheck = setInterval(async () => {
+                    await fetchStatus();
+                }, 5000);
+
+                // Stop after 2 minutes max
+                setTimeout(() => {
+                    clearInterval(interval);
+                    clearInterval(statusCheck);
+                    document.getElementById('progress-fill').style.width = '100%';
+                    document.getElementById('progress-text').textContent = 'Backup started!';
+                    setTimeout(() => {
+                        document.getElementById('backup-progress').style.display = 'none';
+                        backupRunning = false;
+                    }, 3000);
+                }, 10000);
+
+            } catch (error) {
+                console.error('Failed to trigger backup:', error);
+                document.getElementById('progress-text').textContent = 'Error!';
+                setTimeout(() => {
+                    document.getElementById('backup-progress').style.display = 'none';
+                    backupRunning = false;
+                }, 3000);
+            }
+        }
+
+        // Toggle logs visibility
+        function toggleLogs() {
+            logsVisible = !logsVisible;
+            const logsBox = document.getElementById('logs-box');
+            logsBox.style.display = logsVisible ? 'block' : 'none';
+            if (logsVisible) fetchLogs();
+        }
+
+        // Refresh status
+        function refreshStatus() {
+            fetchStatus();
+            fetchHealth();
+            if (logsVisible) fetchLogs();
+        }
+
+        // Download encryption key
+        function downloadEncryptionKey() {
+            alert('To download encryption key:\n\ndocker cp pbs-backup-client:/config/encryption-key.json ./\n\nRun this command in your terminal.');
+        }
+
+        // Helper functions
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function maskSensitive(text) {
+            // Mask password/token parts
+            return text.replace(/:[^@:]+@/g, ':****@');
+        }
+
+        function getEnvVar(name, defaultValue) {
+            // In real implementation, these would come from API
+            // For now, return mock data
+            return defaultValue;
+        }
+
+        // Initialize
+        refreshStatus();
+        setInterval(refreshStatus, 30000); // Auto-refresh every 30 seconds
+        if (logsVisible) setInterval(fetchLogs, 5000); // Update logs every 5 seconds when visible
+    </script>
+</body>
+</html>

@@ -8,72 +8,80 @@ log() {
     echo "[API] [$(date +'%Y-%m-%d %H:%M:%S')] $1"
 }
 
-# Function to handle HTTP requests
-handle_request() {
-    local method="$1"
-    local path="$2"
-    
-    case "$path" in
-        /status)
-            if [ -f /logs/status.json ]; then
-                cat /logs/status.json
-            else
-                echo '{"error":"No backup status available"}'
-            fi
-            ;;
-        /health)
-            if /usr/local/bin/healthcheck >/dev/null 2>&1; then
-                echo '{"status":"healthy"}'
-            else
-                echo '{"status":"unhealthy"}'
-            fi
-            ;;
-        /backup)
-            if [ "$method" = "POST" ]; then
-                echo '{"status":"starting","message":"Backup triggered"}'
-                /usr/local/bin/pbs-backup &
-            else
-                echo '{"error":"Use POST method to trigger backup"}'
-            fi
-            ;;
-        /logs)
-            if [ -f /logs/last-backup.log ]; then
-                tail -n 50 /logs/last-backup.log | jq -R -s -c 'split("\n")'
-            else
-                echo '{"logs":[]}'
-            fi
-            ;;
-        *)
-            echo '{"error":"Not found","available_endpoints":["/status","/health","/backup","/logs"]}'
-            ;;
-    esac
-}
-
 # Simple HTTP server using nc
 log "Starting API server on port $PORT"
 
 while true; do
-    {
+    (
         read -r method path protocol
-        
+
+        # Strip carriage returns and whitespace from path
+        path=$(echo "$path" | tr -d '\r' | xargs)
+
+        # Debug logging
+        log "REQUEST: method=[$method] path=[$path] len=${#path}"
+
         # Read headers (discard)
         while read -r line; do
             [ -z "$line" ] || [ "$line" = $'\r' ] && break
         done
-        
-        # Generate response
-        RESPONSE=$(handle_request "$method" "$path")
-        CONTENT_LENGTH=${#RESPONSE}
-        
+
+        # Handle request directly (avoid subshell variable issues)
+        case "$path" in
+            /|/dashboard.html)
+                MIME_TYPE="text/html"
+                BODY=$(cat /usr/local/share/dashboard.html)
+                ;;
+            /status)
+                MIME_TYPE="application/json"
+                if [ -f /logs/status.json ]; then
+                    BODY=$(cat /logs/status.json)
+                else
+                    BODY='{"error":"No backup status available"}'
+                fi
+                ;;
+            /health)
+                MIME_TYPE="application/json"
+                if /usr/local/bin/healthcheck >/dev/null 2>&1; then
+                    BODY='{"status":"healthy"}'
+                else
+                    BODY='{"status":"unhealthy"}'
+                fi
+                ;;
+            /backup)
+                MIME_TYPE="application/json"
+                if [ "$method" = "POST" ]; then
+                    BODY='{"status":"starting","message":"Backup triggered"}'
+                    /usr/local/bin/pbs-backup &
+                else
+                    BODY='{"error":"Use POST method to trigger backup"}'
+                fi
+                ;;
+            /logs)
+                MIME_TYPE="application/json"
+                if [ -f /logs/last-backup.log ]; then
+                    BODY=$(tail -n 50 /logs/last-backup.log | jq -R -s -c 'split("\n") | {logs: .}')
+                else
+                    BODY='{"logs":[]}'
+                fi
+                ;;
+            *)
+                MIME_TYPE="application/json"
+                BODY='{"error":"Not found","available_endpoints":["/","/status","/health","/backup","/logs"]}'
+                ;;
+        esac
+
+        CONTENT_LENGTH=${#BODY}
+
         # Send HTTP response
         cat << EOF
 HTTP/1.1 200 OK
-Content-Type: application/json
+Content-Type: $MIME_TYPE
 Content-Length: $CONTENT_LENGTH
 Access-Control-Allow-Origin: *
 Connection: close
 
-$RESPONSE
+$BODY
 EOF
-    } | nc -l -p $PORT -q 1
+    ) | nc -l -p $PORT -q 1
 done
